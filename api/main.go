@@ -32,7 +32,7 @@ func main() {
 		log.Fatalf("Redis connection error: %v", err)
 	}
 
-	log.Println("Successfully connected to Redis")
+	log.Println("Connected to Redis")
 
 	app := fiber.New()
 
