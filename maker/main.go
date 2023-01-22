@@ -44,7 +44,7 @@ func main() {
 		go func(count int) {
 			val, err := clientRedis.BRPop(0, common.REDIS_QUEUE_LIST_KEY).Result()
 			if err != nil {
-				log.Println("RabbitMQ messages channel closed")
+				log.Printf("Redis brpop error: %v", err)
 			}
 
 			message := val[1]
