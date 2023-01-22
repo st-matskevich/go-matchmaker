@@ -14,9 +14,8 @@ func main() {
 
 	redisServerURL := os.Getenv("REDIS_SERVER_URL")
 	clientRedis := redis.NewClient(&redis.Options{
-		Addr:     redisServerURL,
-		Password: "",
-		DB:       0,
+		Addr: redisServerURL,
+		DB:   common.REDIS_DB_ID,
 	})
 	defer clientRedis.Close()
 
@@ -37,11 +36,9 @@ func main() {
 	log.Printf("Starting processing messages in %v jobs", maxJobs)
 
 	waitChan := make(chan struct{}, maxJobs)
-	count := 0
 	for {
 		waitChan <- struct{}{}
-		count++
-		go func(count int) {
+		go func() {
 			val, err := clientRedis.BRPop(0, common.REDIS_QUEUE_LIST_KEY).Result()
 			if err != nil {
 				log.Printf("Redis brpop error: %v", err)
@@ -54,6 +51,6 @@ func main() {
 			}
 
 			<-waitChan
-		}(count)
+		}()
 	}
 }

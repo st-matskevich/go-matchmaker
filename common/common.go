@@ -11,4 +11,5 @@ type RequestBody struct {
 	Status string `json:"status"`
 }
 
+const REDIS_DB_ID = 0
 const REDIS_QUEUE_LIST_KEY = "queue"

@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/sony/sonyflake"
+	"github.com/st-matskevich/go-matchmaker/common"
 )
 
 func main() {
@@ -21,9 +22,8 @@ func main() {
 
 	redisServerURL := os.Getenv("REDIS_SERVER_URL")
 	clientRedis := redis.NewClient(&redis.Options{
-		Addr:     redisServerURL,
-		Password: "",
-		DB:       0,
+		Addr: redisServerURL,
+		DB:   common.REDIS_DB_ID,
 	})
 	defer clientRedis.Close()
 
