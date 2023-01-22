@@ -14,7 +14,7 @@ COPY ./common ./common
 # Set necessary environment variables needed 
 # for our image and build the api.
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-RUN go build -ldflags="-s -w" -o api main.go
+RUN go build -ldflags="-s -w" -o api *.go
 
 FROM scratch
 

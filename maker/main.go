@@ -1,14 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"math/rand"
 	"os"
 	"strconv"
-	"time"
 
-	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/go-redis/redis"
 	"github.com/streadway/amqp"
 )
 
@@ -43,10 +40,26 @@ func main() {
 
 	log.Println("Successfully connected to RabbitMQ")
 
-	maxJobs, err := strconv.ParseInt(os.Getenv("MAX_CONCURRENT_JOBS"), 10, 32)
+	redisServerURL := os.Getenv("REDIS_SERVER_URL")
+	clientRedis := redis.NewClient(&redis.Options{
+		Addr:     redisServerURL,
+		Password: "",
+		DB:       0,
+	})
+
+	_, err = clientRedis.Ping().Result()
+	if err != nil {
+		log.Fatalf("Redis connection error: %v", err)
+	}
+
+	log.Println("Successfully connected to Redis")
+
+	maxJobs, err := strconv.Atoi(os.Getenv("MAX_CONCURRENT_JOBS"))
 	if err != nil {
 		log.Fatalf("Failed to MAX_CONCURRENT_JOBS: %v", err)
 	}
+
+	processor := Processor{redisClient: clientRedis}
 
 	log.Printf("Starting processing messages in %v jobs", maxJobs)
 
@@ -61,7 +74,7 @@ func main() {
 				log.Println("RabbitMQ messages channel closed")
 			}
 
-			err := processMessage(message)
+			err := processor.ProcessMessage(message)
 			if err != nil {
 				log.Printf("Failed to process message (%v): %v", message, err)
 			}
@@ -69,21 +82,4 @@ func main() {
 			<-waitChan
 		}(count)
 	}
-}
-
-func processMessage(message amqp.Delivery) error {
-	var request common.RequestBody
-	err := json.Unmarshal(message.Body, &request)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Got request: %v", request)
-
-	//simulate some work
-	time.Sleep(time.Duration((1000 + rand.Intn(2000)) * int(time.Millisecond)))
-
-	log.Printf("Finished request: %v", request.ID)
-
-	return nil
 }

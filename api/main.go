@@ -1,14 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 
+	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/sony/sonyflake"
-	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/streadway/amqp"
 )
 
@@ -22,19 +21,19 @@ func main() {
 	}
 
 	amqpServerURL := os.Getenv("AMQP_SERVER_URL")
-	connectRabbitMQ, err := amqp.Dial(amqpServerURL)
+	connectRMQ, err := amqp.Dial(amqpServerURL)
 	if err != nil {
 		log.Fatalf("RabbitMQ connection error: %v", err)
 	}
-	defer connectRabbitMQ.Close()
+	defer connectRMQ.Close()
 
-	channelRabbitMQ, err := connectRabbitMQ.Channel()
+	channelRMQ, err := connectRMQ.Channel()
 	if err != nil {
 		log.Fatalf("RabbitMQ channel open error: %v", err)
 	}
-	defer channelRabbitMQ.Close()
+	defer channelRMQ.Close()
 
-	_, err = channelRabbitMQ.QueueDeclare(
+	_, err = channelRMQ.QueueDeclare(
 		"MakerQueue", // queue name
 		false,        // durable
 		false,        // auto delete
@@ -48,44 +47,29 @@ func main() {
 
 	log.Println("Successfully connected to RabbitMQ")
 
+	redisServerURL := os.Getenv("REDIS_SERVER_URL")
+	clientRedis := redis.NewClient(&redis.Options{
+		Addr:     redisServerURL,
+		Password: "",
+		DB:       0,
+	})
+
+	_, err = clientRedis.Ping().Result()
+	if err != nil {
+		log.Fatalf("Redis connection error: %v", err)
+	}
+
+	log.Println("Successfully connected to Redis")
+
 	app := fiber.New()
 
 	app.Use(
 		logger.New(),
 	)
 
-	app.Post("/request", func(c *fiber.Ctx) error {
-		id, err := sf.NextID()
-		if err != nil {
-			log.Printf("Sonyflake id generation error: %v", err)
-			return c.SendStatus(fiber.StatusInternalServerError)
-		}
-
-		body := common.RequestBody{ID: id}
-		bytes, err := json.Marshal(body)
-		if err != nil {
-			log.Printf("JSON encoder error: %v", err)
-			return c.SendStatus(fiber.StatusInternalServerError)
-		}
-
-		message := amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(bytes),
-		}
-
-		if err := channelRabbitMQ.Publish(
-			"",           // exchange
-			"MakerQueue", // queue name
-			false,        // mandatory
-			false,        // immediate
-			message,      // message to publish
-		); err != nil {
-			log.Printf("RabbitMQ message post error: %v", err)
-			return c.SendStatus(fiber.StatusInternalServerError)
-		}
-
-		return c.Status(fiber.StatusAccepted).SendString(string(bytes))
-	})
+	controller := Controller{idGenerator: sf, rmqChannel: channelRMQ, redisClient: clientRedis}
+	app.Post("/request", controller.HandleCreateRequest)
+	app.Get("/request/:id", controller.HandleGetRequest)
 
 	log.Fatal(app.Listen(":3000"))
 }
