@@ -9,16 +9,15 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/st-matskevich/go-matchmaker/common"
-	"github.com/streadway/amqp"
 )
 
 type Processor struct {
 	redisClient *redis.Client
 }
 
-func (processor *Processor) ProcessMessage(message amqp.Delivery) error {
+func (processor *Processor) ProcessMessage(message string) error {
 	var request common.RequestBody
-	err := json.Unmarshal(message.Body, &request)
+	err := json.Unmarshal([]byte(message), &request)
 	if err != nil {
 		return err
 	}

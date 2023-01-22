@@ -6,7 +6,6 @@ require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/gofiber/fiber/v2 v2.41.0
 	github.com/sony/sonyflake v1.1.0
-	github.com/streadway/amqp v1.0.0
 )
 
 require (

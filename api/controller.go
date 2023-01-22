@@ -9,12 +9,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/common"
-	"github.com/streadway/amqp"
 )
 
 type Controller struct {
 	idGenerator *sonyflake.Sonyflake
-	rmqChannel  *amqp.Channel
 	redisClient *redis.Client
 }
 
@@ -39,19 +37,9 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
-	message := amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        []byte(bytes),
-	}
-
-	if err := controller.rmqChannel.Publish(
-		"",           // exchange
-		"MakerQueue", // queue name
-		false,        // mandatory
-		false,        // immediate
-		message,      // message to publish
-	); err != nil {
-		log.Printf("RabbitMQ message post error: %v", err)
+	err = controller.redisClient.LPush(common.REDIS_QUEUE_LIST_KEY, string(bytes)).Err()
+	if err != nil {
+		log.Printf("Redis lpush error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
