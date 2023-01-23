@@ -20,6 +20,21 @@ type Processor struct {
 	dockerClient *client.Client
 }
 
+func (processor *Processor) WriteRequest(req *common.RequestBody) error {
+	stringID := strconv.FormatUint(req.ID, 10)
+	bytes, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	processor.redisClient.Set(stringID, string(bytes), 0).Err()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (processor *Processor) ProcessMessage(message string) error {
 	var request common.RequestBody
 	err := json.Unmarshal([]byte(message), &request)
@@ -27,16 +42,17 @@ func (processor *Processor) ProcessMessage(message string) error {
 		return err
 	}
 
+	defer func() {
+		if err != nil {
+			request.Status = common.FAILED
+			processor.WriteRequest(&request)
+		}
+	}()
+
 	log.Printf("Got request: %v", request)
 
 	request.Status = common.IN_PROGRESS
-	stringID := strconv.FormatUint(request.ID, 10)
-	bytes, err := json.Marshal(request)
-	if err != nil {
-		return err
-	}
-
-	err = processor.redisClient.Set(stringID, string(bytes), 0).Err()
+	err = processor.WriteRequest(&request)
 	if err != nil {
 		return err
 	}
@@ -51,12 +67,7 @@ func (processor *Processor) ProcessMessage(message string) error {
 	log.Printf("Finished request: %v", request.ID)
 
 	request.Status = common.DONE
-	bytes, err = json.Marshal(request)
-	if err != nil {
-		return err
-	}
-
-	err = processor.redisClient.Set(stringID, string(bytes), 0).Err()
+	err = processor.WriteRequest(&request)
 	if err != nil {
 		return err
 	}
