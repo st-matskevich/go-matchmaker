@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
@@ -68,19 +69,38 @@ func (processor *Processor) ProcessMessage(message string) error {
 func (processor *Processor) StartContainer() error {
 	ctx := context.Background()
 
+	pullOptions := types.ImagePullOptions{}
+	if os.Getenv("IMAGE_REGISTRY_USERNAME") != "" {
+		authConfig := types.AuthConfig{
+			Username: os.Getenv("IMAGE_REGISTRY_USERNAME"),
+			Password: os.Getenv("IMAGE_REGISTRY_PASSWORD"),
+		}
+
+		encodedJSON, err := json.Marshal(authConfig)
+		if err != nil {
+			return err
+		}
+
+		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
+	}
+
 	imageName := os.Getenv("IMAGE_TO_PULL")
 	log.Printf("Pulling image %v", imageName)
-	out, err := processor.dockerClient.ImagePull(ctx, imageName, types.ImagePullOptions{})
+	out, err := processor.dockerClient.ImagePull(ctx, imageName, pullOptions)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 	log.Println("Image pulled")
 
+	hostConfig := container.HostConfig{}
+	//hostConfig.PortBindings is not allowing to pick random port
+	hostConfig.PublishAllPorts = true
+
 	log.Println("Creating continer")
 	resp, err := processor.dockerClient.ContainerCreate(ctx, &container.Config{
 		Image: imageName,
-	}, nil, nil, nil, "")
+	}, &hostConfig, nil, nil, "")
 	if err != nil {
 		return err
 	}
