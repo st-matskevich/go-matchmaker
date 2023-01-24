@@ -10,6 +10,7 @@ const (
 type RequestBody struct {
 	ID     uint64 `json:"id"`
 	Status string `json:"status"`
+	Server string `json:"server,omitempty"`
 }
 
 const REDIS_DB_ID = 0

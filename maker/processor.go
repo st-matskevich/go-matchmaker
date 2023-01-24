@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"strconv"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/go-redis/redis"
 	"github.com/st-matskevich/go-matchmaker/common"
 )
@@ -59,10 +62,12 @@ func (processor *Processor) ProcessMessage(message string) error {
 
 	log.Printf("Set request %v status to IN_PROGRESS", request.ID)
 
-	err = processor.StartContainer()
+	containerPort, err := processor.StartNewContainer()
 	if err != nil {
 		return err
 	}
+
+	request.Server = "localhost:" + containerPort
 
 	log.Printf("Finished request: %v", request.ID)
 
@@ -77,7 +82,29 @@ func (processor *Processor) ProcessMessage(message string) error {
 	return nil
 }
 
-func (processor *Processor) StartContainer() error {
+func (processor *Processor) StartNewContainer() (string, error) {
+	ctx := context.Background()
+
+	log.Printf("Looking for exited containers")
+
+	imageName := os.Getenv("IMAGE_TO_PULL")
+	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: imageName}, filters.KeyValuePair{Key: "status", Value: "exited"})
+	containers, err := processor.dockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	if err != nil {
+		return "", err
+	}
+
+	for _, container := range containers {
+		log.Printf("Found exited container %v", container.ID)
+		return processor.StartContainer(ctx, container.ID)
+	}
+
+	log.Printf("No exited containers available, starting new one")
+
+	return processor.CreateNewContainer()
+}
+
+func (processor *Processor) CreateNewContainer() (string, error) {
 	ctx := context.Background()
 
 	pullOptions := types.ImagePullOptions{}
@@ -89,7 +116,7 @@ func (processor *Processor) StartContainer() error {
 
 		encodedJSON, err := json.Marshal(authConfig)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
@@ -99,13 +126,12 @@ func (processor *Processor) StartContainer() error {
 	log.Printf("Pulling image %v", imageName)
 	out, err := processor.dockerClient.ImagePull(ctx, imageName, pullOptions)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer out.Close()
 	log.Println("Image pulled")
 
 	hostConfig := container.HostConfig{}
-	//hostConfig.PortBindings is not allowing to pick random port
 	hostConfig.PublishAllPorts = true
 
 	log.Println("Creating continer")
@@ -113,15 +139,38 @@ func (processor *Processor) StartContainer() error {
 		Image: imageName,
 	}, &hostConfig, nil, nil, "")
 	if err != nil {
-		return err
+		return "", err
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	log.Println("Starting container")
-	if err := processor.dockerClient.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return err
-	}
-	log.Println("Container started")
+	return processor.StartContainer(ctx, resp.ID)
+}
 
-	return nil
+func (processor *Processor) StartContainer(ctx context.Context, ID string) (string, error) {
+	log.Println("Starting container")
+	err := processor.dockerClient.ContainerStart(ctx, ID, types.ContainerStartOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	containerInfo, err := processor.dockerClient.ContainerInspect(ctx, ID)
+	if err != nil {
+		return "", err
+	}
+
+	imagePort := os.Getenv("IMAGE_PORT")
+	port, err := nat.NewPort(nat.SplitProtoPort(imagePort))
+	if err != nil {
+		return "", err
+	}
+
+	binding := containerInfo.NetworkSettings.Ports[port]
+	if len(binding) == 0 {
+		return "", errors.New("no binding found for specified IMAGE_PORT")
+	}
+
+	hostPort := binding[0].HostPort
+	log.Printf("Container started on port %v", hostPort)
+
+	return hostPort, nil
 }
