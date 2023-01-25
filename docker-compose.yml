@@ -6,8 +6,6 @@ services:
   redis-db:
     image: redis:7-alpine
     container_name: redis-db
-    ports:
-      - 6379:6379
     restart: always
     volumes:
       - db-data:/data
@@ -39,6 +37,7 @@ services:
     environment:
       REDIS_SERVER_URL: redis-db:6379
       MAX_CONCURRENT_JOBS: 3
+      DOCKER_NETWORK: dev-network
     restart: always
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -53,4 +52,5 @@ volumes:
 
 networks:
   dev-network:
-    driver: bridge
+    name: dev-network
+    external: true

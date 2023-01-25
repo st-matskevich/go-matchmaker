@@ -131,8 +131,14 @@ func (processor *Processor) CreateNewContainer() (string, error) {
 	defer out.Close()
 	log.Println("Image pulled")
 
+	//using limited port range for container port mapping would be much more correct, but:
+	//1) scanning even 1k ports takes much more time then -P(ublish)
+	//2) docker can fail binding if any(!) of ports in range is already binded
+	//looks like OS is much better in ports management, so to limit available ports using
+	///proc/sys/net/ipv4/ip_local_port_range
 	hostConfig := container.HostConfig{}
 	hostConfig.PublishAllPorts = true
+	hostConfig.NetworkMode = container.NetworkMode(os.Getenv("DOCKER_NETWORK"))
 
 	log.Println("Creating continer")
 	resp, err := processor.dockerClient.ContainerCreate(ctx, &container.Config{
@@ -164,6 +170,7 @@ func (processor *Processor) StartContainer(ctx context.Context, ID string) (stri
 		return "", err
 	}
 
+	//containerInfo.Config.Hostname and port.Port() can be used to access started container
 	binding := containerInfo.NetworkSettings.Ports[port]
 	if len(binding) == 0 {
 		return "", errors.New("no binding found for specified IMAGE_PORT")
