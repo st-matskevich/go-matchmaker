@@ -46,6 +46,10 @@ func main() {
 	}
 
 	processor := Processor{redisClient: clientRedis, dockerClient: clientDocker}
+	processor.LoadEnvironmentVariables()
+	if err != nil {
+		log.Fatalf("Failed to load variables for processor: %v", err)
+	}
 
 	log.Printf("Starting processing messages in %v jobs", maxJobs)
 
