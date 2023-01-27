@@ -19,7 +19,7 @@ func New(authorizer Authorizer) fiber.Handler {
 
 		if err == nil {
 			c.Locals(CLIENT_ID_CTX_KEY, id)
-			c.Next()
+			return c.Next()
 		}
 
 		return c.SendStatus(fiber.StatusUnauthorized)
