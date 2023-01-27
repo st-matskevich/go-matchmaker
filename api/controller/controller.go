@@ -1,4 +1,4 @@
-package main
+package controller
 
 import (
 	"encoding/json"
@@ -14,6 +14,11 @@ import (
 type Controller struct {
 	idGenerator *sonyflake.Sonyflake
 	redisClient *redis.Client
+}
+
+func (controller *Controller) Init(generator *sonyflake.Sonyflake, redis *redis.Client) {
+	controller.idGenerator = generator
+	controller.redisClient = redis
 }
 
 func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {

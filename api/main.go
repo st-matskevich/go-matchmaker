@@ -8,6 +8,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/sony/sonyflake"
+	"github.com/st-matskevich/go-matchmaker/api/auth"
+	"github.com/st-matskevich/go-matchmaker/api/controller"
 	"github.com/st-matskevich/go-matchmaker/common"
 )
 
@@ -38,9 +40,11 @@ func main() {
 
 	app.Use(
 		logger.New(),
+		auth.New(&auth.DummyAuthorizer{}),
 	)
 
-	controller := Controller{idGenerator: sf, redisClient: clientRedis}
+	controller := controller.Controller{}
+	controller.Init(sf, clientRedis)
 	app.Post("/request", controller.HandleCreateRequest)
 	app.Get("/request/:id", controller.HandleGetRequest)
 

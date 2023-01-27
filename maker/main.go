@@ -9,6 +9,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/joho/godotenv"
 	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/maker/processor"
 )
 
 func main() {
@@ -45,8 +46,8 @@ func main() {
 		log.Fatalf("Failed to MAX_CONCURRENT_JOBS: %v", err)
 	}
 
-	processor := Processor{redisClient: clientRedis, dockerClient: clientDocker}
-	processor.LoadEnvironmentVariables()
+	processor := processor.Processor{}
+	processor.Init(clientRedis, clientDocker)
 	if err != nil {
 		log.Fatalf("Failed to load variables for processor: %v", err)
 	}

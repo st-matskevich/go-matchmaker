@@ -8,22 +8,22 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the code into the container.
-COPY ./maker .
+COPY ./maker ./maker
 COPY ./common ./common
 
 # Set necessary environment variables needed 
 # for our image and build the maker.
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-RUN go build -ldflags="-s -w" -o maker *.go
+RUN go build -ldflags="-s -w" -o main ./maker/main.go
 
 FROM scratch
 
 # Copy binary and config files from /build 
 # to root folder of scratch container.
-COPY --from=builder ["/build/maker", "/"]
+COPY --from=builder ["/build/main", "/"]
 
 # Copy .env files
 COPY ./*.env .
 
 # Command to run when starting the container.
-ENTRYPOINT ["/maker"]
+ENTRYPOINT ["/main"]

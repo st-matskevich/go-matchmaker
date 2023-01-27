@@ -1,4 +1,4 @@
-package main
+package processor
 
 import (
 	"context"
@@ -37,7 +37,10 @@ type Processor struct {
 	lookupCooldownMillisecond int
 }
 
-func (processor *Processor) LoadEnvironmentVariables() error {
+func (processor *Processor) Init(redis *redis.Client, docker *client.Client) error {
+	processor.redisClient = redis
+	processor.dockerClient = docker
+
 	processor.imageName = os.Getenv("IMAGE_TO_PULL")
 	processor.dockerNetwork = os.Getenv("DOCKER_NETWORK")
 
