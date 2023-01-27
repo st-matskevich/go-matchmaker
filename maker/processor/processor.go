@@ -37,6 +37,16 @@ type Processor struct {
 	lookupCooldownMillisecond int
 }
 
+type ContainerInfo struct {
+	ID          string
+	ExposedPort string
+}
+
+func FillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
+	request.Container = info.ID
+	request.Server = "localhost:" + info.ExposedPort
+}
+
 func (processor *Processor) Init(redis *redis.Client, docker *client.Client) error {
 	processor.redisClient = redis
 	processor.dockerClient = docker
@@ -81,6 +91,7 @@ func (processor *Processor) WriteRequest(req *common.RequestBody) error {
 
 func (processor *Processor) ProcessMessage(message string) error {
 	var request common.RequestBody
+	ctx := context.Background()
 	err := json.Unmarshal([]byte(message), &request)
 	if err != nil {
 		return err
@@ -104,28 +115,28 @@ func (processor *Processor) ProcessMessage(message string) error {
 	log.Printf("Set request %v status to IN_PROGRESS", request.ID)
 
 	for {
-		containerPort, err := processor.FindRunningContainer()
+		containerInfo, err := processor.FindRunningContainer(ctx)
 		if err != nil {
 			return err
 		}
 
-		if containerPort != "" {
-			request.Server = "localhost:" + containerPort
+		if containerInfo.ExposedPort != "" {
+			FillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
 		if processor.creatorMutex.TryLock() {
 			defer processor.creatorMutex.Unlock()
-			containerPort, err = processor.StartNewContainer()
+			containerInfo, err = processor.StartNewContainer(ctx)
 			if err != nil {
 				return err
 			}
 
-			if containerPort == "" {
+			if containerInfo.ExposedPort == "" {
 				return errors.New("StartNewContainer didn't return port")
 			}
 
-			request.Server = "localhost:" + containerPort
+			FillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
@@ -145,15 +156,15 @@ func (processor *Processor) ProcessMessage(message string) error {
 	return nil
 }
 
-func (processor *Processor) FindRunningContainer() (string, error) {
-	ctx := context.Background()
+func (processor *Processor) FindRunningContainer(ctx context.Context) (ContainerInfo, error) {
+	result := ContainerInfo{}
 
 	log.Printf("Looking for available containers")
 
 	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: processor.imageName}, filters.KeyValuePair{Key: "status", Value: "running"})
 	containers, err := processor.dockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	for _, container := range containers {
@@ -177,39 +188,47 @@ func (processor *Processor) FindRunningContainer() (string, error) {
 				continue
 			}
 
-			return port, nil
+			result.ID = container.ID
+			result.ExposedPort = port
+			return result, nil
 		}
 	}
 
 	log.Printf("No available containers found")
 
-	return "", nil
+	return result, nil
 }
 
-func (processor *Processor) StartNewContainer() (string, error) {
-	ctx := context.Background()
+func (processor *Processor) StartNewContainer(ctx context.Context) (ContainerInfo, error) {
+	result := ContainerInfo{}
 
 	log.Printf("Looking for exited containers")
 
 	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: processor.imageName}, filters.KeyValuePair{Key: "status", Value: "exited"})
 	containers, err := processor.dockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	for _, container := range containers {
 		log.Printf("Found exited container %v", container.ID)
-		return processor.StartContainer(ctx, container.ID)
+		exposedPort, err := processor.StartContainer(ctx, container.ID)
+		if err != nil {
+			return result, err
+		}
+
+		result.ID = container.ID
+		result.ExposedPort = exposedPort
+		return result, nil
 	}
 
 	log.Printf("No exited containers available, starting new one")
 
-	return processor.CreateNewContainer()
+	return processor.CreateNewContainer(ctx)
 }
 
-func (processor *Processor) CreateNewContainer() (string, error) {
-	ctx := context.Background()
-
+func (processor *Processor) CreateNewContainer(ctx context.Context) (ContainerInfo, error) {
+	result := ContainerInfo{}
 	pullOptions := types.ImagePullOptions{}
 	if processor.imageRegistryUsername != "" {
 		authConfig := types.AuthConfig{
@@ -219,7 +238,7 @@ func (processor *Processor) CreateNewContainer() (string, error) {
 
 		encodedJSON, err := json.Marshal(authConfig)
 		if err != nil {
-			return "", err
+			return result, err
 		}
 
 		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
@@ -228,7 +247,7 @@ func (processor *Processor) CreateNewContainer() (string, error) {
 	log.Printf("Pulling image %v", processor.imageName)
 	out, err := processor.dockerClient.ImagePull(ctx, processor.imageName, pullOptions)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 	defer out.Close()
 	log.Println("Image pulled")
@@ -245,11 +264,18 @@ func (processor *Processor) CreateNewContainer() (string, error) {
 	log.Println("Creating continer")
 	resp, err := processor.dockerClient.ContainerCreate(ctx, &container.Config{Image: processor.imageName}, &hostConfig, nil, nil, "")
 	if err != nil {
-		return "", err
+		return result, err
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	return processor.StartContainer(ctx, resp.ID)
+	exposedPort, err := processor.StartContainer(ctx, resp.ID)
+	if err != nil {
+		return result, err
+	}
+
+	result.ID = resp.ID
+	result.ExposedPort = exposedPort
+	return result, nil
 }
 
 func (processor *Processor) StartContainer(ctx context.Context, ID string) (string, error) {

@@ -6,6 +6,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const CLIENT_ID_CTX_KEY = "client-id"
+
 type Authorizer interface {
 	Authorize(header string) (id string, err error)
 }
@@ -16,7 +18,7 @@ func New(authorizer Authorizer) fiber.Handler {
 		id, err := authorizer.Authorize(authHeader)
 
 		if err == nil {
-			c.Locals("client-id", id)
+			c.Locals(CLIENT_ID_CTX_KEY, id)
 			c.Next()
 		}
 
