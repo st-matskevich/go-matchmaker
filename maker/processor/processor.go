@@ -210,7 +210,8 @@ func (processor *Processor) StartNewContainer(ctx context.Context) (ContainerInf
 		return result, err
 	}
 
-	for _, container := range containers {
+	if len(containers) > 0 {
+		container := containers[0]
 		log.Printf("Found exited container %v", container.ID)
 		exposedPort, err := processor.StartContainer(ctx, container.ID)
 		if err != nil {
