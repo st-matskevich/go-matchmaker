@@ -89,7 +89,7 @@ func (processor *Processor) WriteRequest(req *common.RequestBody) error {
 	return nil
 }
 
-func (processor *Processor) ProcessMessage(message string) error {
+func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	var request common.RequestBody
 	ctx := context.Background()
 	err := json.Unmarshal([]byte(message), &request)
@@ -98,7 +98,7 @@ func (processor *Processor) ProcessMessage(message string) error {
 	}
 
 	defer func() {
-		if err != nil {
+		if rerr != nil {
 			request.Status = common.FAILED
 			processor.WriteRequest(&request)
 		}
