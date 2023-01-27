@@ -16,3 +16,11 @@ type RequestBody struct {
 
 const REDIS_DB_ID = 0
 const REDIS_QUEUE_LIST_KEY = "queue"
+
+func GetTokenKey(id string) string {
+	return "token-" + id
+}
+
+func GetRequestKey(id string) string {
+	return "request-" + id
+}

@@ -36,7 +36,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	}
 
 	stringID := strconv.FormatUint(id, 10)
-	err = controller.redisClient.Set(stringID, string(bytes), 0).Err()
+	err = controller.redisClient.Set(common.GetRequestKey(stringID), string(bytes), 0).Err()
 	if err != nil {
 		log.Printf("Redis set error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
@@ -54,7 +54,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 func (controller *Controller) HandleGetRequest(c *fiber.Ctx) error {
 	stringID := c.Params("id")
 
-	count, err := controller.redisClient.Exists(stringID).Result()
+	count, err := controller.redisClient.Exists(common.GetRequestKey(stringID)).Result()
 	if err != nil {
 		log.Printf("Redis exists error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
@@ -64,7 +64,7 @@ func (controller *Controller) HandleGetRequest(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 
-	val, err := controller.redisClient.Get(stringID).Result()
+	val, err := controller.redisClient.Get(common.GetRequestKey(stringID)).Result()
 	if err != nil {
 		log.Printf("Redis get error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)

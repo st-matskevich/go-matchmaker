@@ -81,7 +81,7 @@ func (processor *Processor) WriteRequest(req *common.RequestBody) error {
 		return err
 	}
 
-	processor.redisClient.Set(stringID, string(bytes), 0).Err()
+	processor.redisClient.Set(common.GetRequestKey(stringID), string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
