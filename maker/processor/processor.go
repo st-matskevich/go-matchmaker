@@ -98,7 +98,8 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	}
 
 	defer func() {
-		if rerr != nil {
+		perr := recover()
+		if perr != nil || rerr != nil {
 			request.Status = common.FAILED
 			processor.WriteRequest(&request)
 		}
