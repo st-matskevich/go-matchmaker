@@ -116,7 +116,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	log.Printf("Set request %v status to IN_PROGRESS", request.ID)
 
 	for {
-		containerInfo, err := processor.FindRunningContainer(ctx)
+		containerInfo, err := processor.FindRunningContainer(ctx, request.ID)
 		if err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 
 		if processor.creatorMutex.TryLock() {
 			defer processor.creatorMutex.Unlock()
-			containerInfo, err = processor.StartNewContainer(ctx)
+			containerInfo, err = processor.StartNewContainer(ctx, request.ID)
 			if err != nil {
 				return err
 			}
@@ -157,7 +157,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	return nil
 }
 
-func (processor *Processor) FindRunningContainer(ctx context.Context) (ContainerInfo, error) {
+func (processor *Processor) FindRunningContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for available containers")
@@ -175,7 +175,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context) (Container
 			continue
 		}
 
-		reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname)
+		reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname, requestID)
 		if err != nil {
 			log.Printf("Failed reserve request on container %v: %v", container.ID, err)
 			continue
@@ -200,7 +200,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context) (Container
 	return result, nil
 }
 
-func (processor *Processor) StartNewContainer(ctx context.Context) (ContainerInfo, error) {
+func (processor *Processor) StartNewContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for exited containers")
@@ -214,7 +214,7 @@ func (processor *Processor) StartNewContainer(ctx context.Context) (ContainerInf
 	if len(containers) > 0 {
 		container := containers[0]
 		log.Printf("Found exited container %v", container.ID)
-		exposedPort, err := processor.StartContainer(ctx, container.ID)
+		exposedPort, err := processor.StartContainer(ctx, requestID, container.ID)
 		if err != nil {
 			return result, err
 		}
@@ -226,10 +226,10 @@ func (processor *Processor) StartNewContainer(ctx context.Context) (ContainerInf
 
 	log.Printf("No exited containers available, starting new one")
 
-	return processor.CreateNewContainer(ctx)
+	return processor.CreateNewContainer(ctx, requestID)
 }
 
-func (processor *Processor) CreateNewContainer(ctx context.Context) (ContainerInfo, error) {
+func (processor *Processor) CreateNewContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
 	result := ContainerInfo{}
 	pullOptions := types.ImagePullOptions{}
 	if processor.imageRegistryUsername != "" {
@@ -270,7 +270,7 @@ func (processor *Processor) CreateNewContainer(ctx context.Context) (ContainerIn
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	exposedPort, err := processor.StartContainer(ctx, resp.ID)
+	exposedPort, err := processor.StartContainer(ctx, requestID, resp.ID)
 	if err != nil {
 		return result, err
 	}
@@ -280,14 +280,14 @@ func (processor *Processor) CreateNewContainer(ctx context.Context) (ContainerIn
 	return result, nil
 }
 
-func (processor *Processor) StartContainer(ctx context.Context, ID string) (string, error) {
+func (processor *Processor) StartContainer(ctx context.Context, requestID uint64, containerID string) (string, error) {
 	log.Println("Starting container")
-	err := processor.dockerClient.ContainerStart(ctx, ID, types.ContainerStartOptions{})
+	err := processor.dockerClient.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	containerInfo, err := processor.dockerClient.ContainerInspect(ctx, ID)
+	containerInfo, err := processor.dockerClient.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return "", err
 	}
@@ -299,7 +299,7 @@ func (processor *Processor) StartContainer(ctx context.Context, ID string) (stri
 
 	log.Printf("Container started on port %v", hostPort)
 
-	reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname)
+	reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname, requestID)
 	if err != nil {
 		return "", err
 	}
@@ -320,9 +320,9 @@ func (processor *Processor) GetContainerExposedPort(containerInfo *types.Contain
 	return binding[0].HostPort, nil
 }
 
-func (processor *Processor) ReserveContainer(hostname string) (bool, error) {
+func (processor *Processor) ReserveContainer(hostname string, requestID uint64) (bool, error) {
 	containerURL := "http://" + hostname + ":" + processor.imageControlPort
-	containerURL += "/reserve"
+	containerURL += "/reservation/" + strconv.FormatUint(requestID, 10)
 	resp, err := http.Post(containerURL, "*", nil)
 	if err != nil {
 		return false, err
