@@ -96,6 +96,10 @@ docker compose logs api -f
 docker compose logs maker -f
 ```
 
+## Documentation
+
+See [DOCUMENTATION](DOCUMENTATION.md) for more information.
+
 ## Built with
 
 - [Go](https://go.dev/)
