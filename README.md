@@ -1,6 +1,6 @@
 # Go-Matchmaker
 
-Orchestrator for your containers written in Go. Can be used to orchestrate game servers or virtual machines.
+Microservices based orchestrator for your containers written in Go. Can be used to orchestrate game servers or virtual machines.
 
 ## Installation
 
@@ -95,10 +95,21 @@ docker compose logs api -f
 docker compose logs maker -f
 ```
 
+## Built with
+
+- [Go](https://go.dev/)
+- [Docker](https://www.docker.com/)
+- [Redis](https://github.com/redis/redis)
+- [Moby Project](https://github.com/moby/moby)
+- [Fiber](https://github.com/gofiber/fiber)
+- [go-redis](https://github.com/redis/go-redis)
+- [godotenv](https://github.com/joho/godotenv)
+
 ## License
 
 Distributed under the MIT License. See <code>[LICENSE](LICENSE)</code> for more information.
 
 ## Contributing
+
 Want a new feature added? Found a bug?
 Go ahead an open [a new issue](https://github.com/st-matskevich/go-matchmaker/issues/new) or feel free to submit a pull request
