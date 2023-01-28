@@ -38,12 +38,12 @@ type Processor struct {
 }
 
 type ContainerInfo struct {
-	ID          string
+	Hostname    string
 	ExposedPort string
 }
 
 func FillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
-	request.Container = info.ID
+	request.Container = info.Hostname
 	request.Server = "localhost:" + info.ExposedPort
 }
 
@@ -189,7 +189,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context, requestID 
 				continue
 			}
 
-			result.ID = container.ID
+			result.Hostname = containerInfo.Config.Hostname
 			result.ExposedPort = port
 			return result, nil
 		}
@@ -214,14 +214,7 @@ func (processor *Processor) StartNewContainer(ctx context.Context, requestID uin
 	if len(containers) > 0 {
 		container := containers[0]
 		log.Printf("Found exited container %v", container.ID)
-		exposedPort, err := processor.StartContainer(ctx, requestID, container.ID)
-		if err != nil {
-			return result, err
-		}
-
-		result.ID = container.ID
-		result.ExposedPort = exposedPort
-		return result, nil
+		return processor.StartContainer(ctx, requestID, container.ID)
 	}
 
 	log.Printf("No exited containers available, starting new one")
@@ -270,45 +263,42 @@ func (processor *Processor) CreateNewContainer(ctx context.Context, requestID ui
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	exposedPort, err := processor.StartContainer(ctx, requestID, resp.ID)
+	return processor.StartContainer(ctx, requestID, resp.ID)
+}
+
+func (processor *Processor) StartContainer(ctx context.Context, requestID uint64, containerID string) (ContainerInfo, error) {
+	result := ContainerInfo{}
+
+	log.Println("Starting container")
+	err := processor.dockerClient.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 	if err != nil {
 		return result, err
 	}
 
-	result.ID = resp.ID
-	result.ExposedPort = exposedPort
-	return result, nil
-}
-
-func (processor *Processor) StartContainer(ctx context.Context, requestID uint64, containerID string) (string, error) {
-	log.Println("Starting container")
-	err := processor.dockerClient.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
-	if err != nil {
-		return "", err
-	}
-
 	containerInfo, err := processor.dockerClient.ContainerInspect(ctx, containerID)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	hostPort, err := processor.GetContainerExposedPort(&containerInfo)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	log.Printf("Container started on port %v", hostPort)
 
 	reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname, requestID)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	if !reserved {
-		return "", errors.New("container failed to reserve a slot")
+		return result, errors.New("container failed to reserve a slot")
 	}
 
-	return hostPort, nil
+	result.Hostname = containerInfo.Config.Hostname
+	result.ExposedPort = hostPort
+	return result, nil
 }
 
 func (processor *Processor) GetContainerExposedPort(containerInfo *types.ContainerJSON) (string, error) {
