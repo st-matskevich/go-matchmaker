@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
-	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/api/controller"
 	"github.com/st-matskevich/go-matchmaker/common"
@@ -20,12 +19,6 @@ func main() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Println("No .env file found")
-	}
-
-	var st sonyflake.Settings
-	sf := sonyflake.NewSonyflake(st)
-	if sf == nil {
-		log.Fatalf("Sonyflake initialization failed")
 	}
 
 	redisServerURL := os.Getenv("REDIS_SERVER_URL")
@@ -50,7 +43,11 @@ func main() {
 	)
 
 	controller := controller.Controller{}
-	controller.Init(sf, clientRedis)
+	err = controller.Init(clientRedis)
+	if err != nil {
+		log.Fatalf("Failed to initialize Controller: %v", err)
+	}
+
 	app.Post("/request", controller.HandleCreateRequest)
 
 	log.Fatal(app.Listen(":3000"))

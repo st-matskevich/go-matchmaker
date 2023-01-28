@@ -49,9 +49,9 @@ func main() {
 	}
 
 	processor := processor.Processor{}
-	processor.Init(clientRedis, clientDocker)
+	err = processor.Init(clientRedis, clientDocker)
 	if err != nil {
-		log.Fatalf("Failed to load variables for processor: %v", err)
+		log.Fatalf("Failed to initialize Processor: %v", err)
 	}
 
 	log.Printf("Starting processing messages in %v jobs", maxJobs)

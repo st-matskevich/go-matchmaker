@@ -11,25 +11,30 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
-	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
 )
 
 type Controller struct {
-	idGenerator *sonyflake.Sonyflake
 	redisClient *redis.Client
 	httpClient  *http.Client
 
 	imageControlPort string
 }
 
-func (controller *Controller) Init(generator *sonyflake.Sonyflake, redis *redis.Client) {
-	controller.idGenerator = generator
+func (controller *Controller) Init(redis *redis.Client) error {
 	controller.redisClient = redis
-	controller.httpClient = &http.Client{Timeout: 5 * time.Second}
+
+	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
+	reservationTimeout, err := strconv.Atoi(timeoutString)
+	if err != nil {
+		return err
+	}
+	controller.httpClient = &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
 
 	controller.imageControlPort = os.Getenv("IMAGE_CONTROL_PORT")
+
+	return nil
 }
 
 func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
@@ -49,7 +54,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 
 	createNewRequest := false
 	if !ok || request.Status == common.FAILED {
-		log.Printf("Client %v last request is failed", clientID)
+		log.Printf("Client %v last request is failed or nil", clientID)
 		createNewRequest = true
 	} else if request.Status == common.CREATED || request.Status == common.IN_PROGRESS || request.Status == common.OCCUPIED {
 		log.Printf("Client %v request is in progress", clientID)
@@ -93,24 +98,17 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 func (controller *Controller) GetClientRequest(ctx context.Context, clientID string) (bool, common.RequestBody, error) {
 	result := common.RequestBody{}
 
-	requestID, err := controller.redisClient.Get(ctx, common.GetClientKey(clientID)).Result()
-	if err == redis.Nil {
-		return false, result, nil
-	} else if err != nil {
-		return false, result, err
-	}
-
 	setArgs := redis.SetArgs{
 		Get: true,
 	}
-	result = common.RequestBody{Status: common.OCCUPIED}
+	result = common.RequestBody{ID: clientID, Status: common.OCCUPIED}
 	bytes, err := json.Marshal(result)
 	if err != nil {
 		return false, result, err
 	}
 
 	//get request body and set as OCCUPIED
-	requestJSON, err := controller.redisClient.SetArgs(ctx, common.GetRequestKey(requestID), bytes, setArgs).Result()
+	requestJSON, err := controller.redisClient.SetArgs(ctx, clientID, bytes, setArgs).Result()
 	if err == redis.Nil {
 		return false, result, nil
 	} else if err != nil {
@@ -131,8 +129,7 @@ func (controller *Controller) UpdateRequest(ctx context.Context, request common.
 		return err
 	}
 
-	stringID := strconv.FormatUint(request.ID, 10)
-	err = controller.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
+	err = controller.redisClient.Set(ctx, request.ID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
@@ -142,7 +139,7 @@ func (controller *Controller) UpdateRequest(ctx context.Context, request common.
 
 func (controller *Controller) GetReservationStatus(request common.RequestBody) (bool, error) {
 	containerURL := "http://" + request.Container + ":" + controller.imageControlPort
-	containerURL += "/reservation/" + strconv.FormatUint(request.ID, 10)
+	containerURL += "/reservation/" + request.ID
 	resp, err := controller.httpClient.Get(containerURL)
 	if err != nil {
 		return false, err
@@ -152,24 +149,13 @@ func (controller *Controller) GetReservationStatus(request common.RequestBody) (
 }
 
 func (controller *Controller) CreateRequest(ctx context.Context, clientID string) error {
-	id, err := controller.idGenerator.NextID()
-	if err != nil {
-		return err
-	}
-
-	body := common.RequestBody{ID: id, Status: common.CREATED}
+	body := common.RequestBody{ID: clientID, Status: common.CREATED}
 	bytes, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
 
-	stringID := strconv.FormatUint(id, 10)
-	err = controller.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
-	if err != nil {
-		return err
-	}
-
-	err = controller.redisClient.Set(ctx, common.GetClientKey(clientID), stringID, 0).Err()
+	err = controller.redisClient.Set(ctx, clientID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}

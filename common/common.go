@@ -9,7 +9,7 @@ const (
 )
 
 type RequestBody struct {
-	ID        uint64 `json:"id"`
+	ID        string `json:"id"`
 	Status    string `json:"status"`
 	Server    string `json:"server,omitempty"`
 	Container string `json:"container,omitempty"`
@@ -17,11 +17,3 @@ type RequestBody struct {
 
 const REDIS_DB_ID = 0
 const REDIS_QUEUE_LIST_KEY = "queue"
-
-func GetClientKey(id string) string {
-	return "client-" + id
-}
-
-func GetRequestKey(id string) string {
-	return "request-" + id
-}

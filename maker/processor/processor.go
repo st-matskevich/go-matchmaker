@@ -24,6 +24,7 @@ import (
 type Processor struct {
 	redisClient  *redis.Client
 	dockerClient *client.Client
+	httpClient   *http.Client
 	creatorMutex sync.Mutex
 
 	imageName        string
@@ -51,6 +52,13 @@ func (processor *Processor) Init(redis *redis.Client, docker *client.Client) err
 	processor.redisClient = redis
 	processor.dockerClient = docker
 
+	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
+	reservationTimeout, err := strconv.Atoi(timeoutString)
+	if err != nil {
+		return err
+	}
+	processor.httpClient = &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
+
 	processor.imageName = os.Getenv("IMAGE_TO_PULL")
 	processor.dockerNetwork = os.Getenv("DOCKER_NETWORK")
 
@@ -75,13 +83,12 @@ func (processor *Processor) Init(redis *redis.Client, docker *client.Client) err
 }
 
 func (processor *Processor) WriteRequest(ctx context.Context, req *common.RequestBody) error {
-	stringID := strconv.FormatUint(req.ID, 10)
 	bytes, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
 
-	processor.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
+	processor.redisClient.Set(ctx, req.ID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
@@ -157,7 +164,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	return nil
 }
 
-func (processor *Processor) FindRunningContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
+func (processor *Processor) FindRunningContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for available containers")
@@ -200,7 +207,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context, requestID 
 	return result, nil
 }
 
-func (processor *Processor) StartNewContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
+func (processor *Processor) StartNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for exited containers")
@@ -222,7 +229,7 @@ func (processor *Processor) StartNewContainer(ctx context.Context, requestID uin
 	return processor.CreateNewContainer(ctx, requestID)
 }
 
-func (processor *Processor) CreateNewContainer(ctx context.Context, requestID uint64) (ContainerInfo, error) {
+func (processor *Processor) CreateNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 	pullOptions := types.ImagePullOptions{}
 	if processor.imageRegistryUsername != "" {
@@ -266,7 +273,7 @@ func (processor *Processor) CreateNewContainer(ctx context.Context, requestID ui
 	return processor.StartContainer(ctx, requestID, resp.ID)
 }
 
-func (processor *Processor) StartContainer(ctx context.Context, requestID uint64, containerID string) (ContainerInfo, error) {
+func (processor *Processor) StartContainer(ctx context.Context, requestID string, containerID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Println("Starting container")
@@ -310,10 +317,10 @@ func (processor *Processor) GetContainerExposedPort(containerInfo *types.Contain
 	return binding[0].HostPort, nil
 }
 
-func (processor *Processor) ReserveContainer(hostname string, requestID uint64) (bool, error) {
+func (processor *Processor) ReserveContainer(hostname string, requestID string) (bool, error) {
 	containerURL := "http://" + hostname + ":" + processor.imageControlPort
-	containerURL += "/reservation/" + strconv.FormatUint(requestID, 10)
-	resp, err := http.Post(containerURL, "*", nil)
+	containerURL += "/reservation/" + requestID
+	resp, err := processor.httpClient.Post(containerURL, "*", nil)
 	if err != nil {
 		return false, err
 	}
