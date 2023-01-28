@@ -75,7 +75,7 @@ You can use [go-dummyserver](https://github.com/st-matskevich/go-dummyserver) as
 
 No special authentication included by default, but all interfaces are already here for you.
 
-To use authentication you need to implement your own type with <code>Authorize</code> method form <code>[Authorizer](api/auth/auth.go)</code> interface. Then pass your type to <code>auth.New()</code> middleware in <code>[api/main.go](api/main.go)</code>
+To use authentication you need to implement your own type with <code>Authorize</code> method form <code>[Authorizer](api/auth/auth.go)</code> interface. Then pass your type to <code>auth.New()</code> middleware in <code>[api/main.go](api/main.go)</code>.
 
 You can use <code>[DummyAuthorizer](api/auth/auth.go)</code> as example.
 
@@ -107,9 +107,9 @@ docker compose logs maker -f
 
 ## License
 
-Distributed under the MIT License. See <code>[LICENSE](LICENSE)</code> for more information.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 
 ## Contributing
 
 Want a new feature added? Found a bug?
-Go ahead an open [a new issue](https://github.com/st-matskevich/go-matchmaker/issues/new) or feel free to submit a pull request
+Go ahead an open [a new issue](https://github.com/st-matskevich/go-matchmaker/issues/new) or feel free to submit a pull request.
