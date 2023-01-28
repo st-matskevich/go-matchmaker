@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
@@ -17,6 +18,7 @@ import (
 type Controller struct {
 	idGenerator *sonyflake.Sonyflake
 	redisClient *redis.Client
+	httpClient  *http.Client
 
 	imageControlPort string
 }
@@ -24,6 +26,7 @@ type Controller struct {
 func (controller *Controller) Init(generator *sonyflake.Sonyflake, redis *redis.Client) {
 	controller.idGenerator = generator
 	controller.redisClient = redis
+	controller.httpClient = &http.Client{Timeout: 5 * time.Second}
 
 	controller.imageControlPort = os.Getenv("IMAGE_CONTROL_PORT")
 }
@@ -44,10 +47,10 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 
 	createNewRequest := false
 	if !ok || request.Status == common.FAILED {
-		log.Println("Last client request failed")
+		log.Printf("Client %v last request is failed", clientID)
 		createNewRequest = true
 	} else if request.Status == common.CREATED || request.Status == common.IN_PROGRESS {
-		log.Println("Client request is in progress")
+		log.Printf("Client %v request is in progress", clientID)
 		createNewRequest = false
 	} else if request.Status == common.DONE {
 		pending, err := controller.GetReservationStatus(request)
@@ -57,10 +60,10 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 		}
 
 		if err == nil && pending {
-			log.Println("Client reservation is OK, sending server address")
+			log.Printf("Client %v reservation is OK, sending server address", clientID)
 			return c.Status(fiber.StatusOK).SendString(request.Server)
 		} else {
-			log.Println("Client reservation is not pending")
+			log.Printf("Client %v reservation is not pending", clientID)
 			createNewRequest = true
 		}
 	} else {
@@ -121,7 +124,7 @@ func (controller *Controller) GetClientRequest(clientID string) (bool, common.Re
 func (controller *Controller) GetReservationStatus(request common.RequestBody) (bool, error) {
 	containerURL := "http://" + request.Container + ":" + controller.imageControlPort
 	containerURL += "/reservation/" + strconv.FormatUint(request.ID, 10)
-	resp, err := http.Get(containerURL)
+	resp, err := controller.httpClient.Get(containerURL)
 	if err != nil {
 		return false, err
 	}
