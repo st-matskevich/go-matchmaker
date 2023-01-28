@@ -7,6 +7,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/joho/godotenv"
 	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/api/controller"
@@ -15,6 +16,11 @@ import (
 
 func main() {
 	log.Println("Starting API service")
+
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println("No .env file found")
+	}
 
 	var st sonyflake.Settings
 	sf := sonyflake.NewSonyflake(st)
@@ -29,7 +35,7 @@ func main() {
 	})
 	defer clientRedis.Close()
 
-	_, err := clientRedis.Ping().Result()
+	_, err = clientRedis.Ping().Result()
 	if err != nil {
 		log.Fatalf("Redis connection error: %v", err)
 	}
@@ -46,7 +52,6 @@ func main() {
 	controller := controller.Controller{}
 	controller.Init(sf, clientRedis)
 	app.Post("/request", controller.HandleCreateRequest)
-	app.Get("/request/:id", controller.HandleGetRequest)
 
 	log.Fatal(app.Listen(":3000"))
 }

@@ -22,5 +22,8 @@ FROM scratch
 # to root folder of scratch container.
 COPY --from=builder ["/build/main", "/"]
 
+# Copy .env files
+COPY ./*.env .
+
 # Command to run when starting the container.
 ENTRYPOINT ["/main"]
