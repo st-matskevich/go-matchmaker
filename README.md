@@ -69,7 +69,8 @@ Used from <b>API</b> service to verify reservation for client with <code>client-
 
 Respond with `200` if there is a slot reserved for specified client, `404` otherwise.
 
-You can use [go-dummyserver](https://github.com/st-matskevich/go-dummyserver) as example or image for testing.
+You can use [go-dummyserver](https://github.com/st-matskevich/go-dummyserver) as example or image for testing. Available as [image](https://hub.docker.com/r/stmatskevich/go-dummyserver) on Docker Hub. 
+
 
 ## Clients authentication
 
