@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strconv"
 
 	"github.com/docker/docker/client"
-	"github.com/go-redis/redis"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/maker/processor"
 )
@@ -34,7 +35,8 @@ func main() {
 	})
 	defer clientRedis.Close()
 
-	_, err = clientRedis.Ping().Result()
+	ctx := context.Background()
+	_, err = clientRedis.Ping(ctx).Result()
 	if err != nil {
 		log.Fatalf("Redis connection error: %v", err)
 	}
@@ -58,7 +60,7 @@ func main() {
 	for {
 		waitChan <- struct{}{}
 		go func() {
-			val, err := clientRedis.BRPop(0, common.REDIS_QUEUE_LIST_KEY).Result()
+			val, err := clientRedis.BRPop(ctx, 0, common.REDIS_QUEUE_LIST_KEY).Result()
 			if err != nil {
 				log.Printf("Redis brpop error: %v", err)
 			}

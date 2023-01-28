@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
@@ -32,13 +33,14 @@ func (controller *Controller) Init(generator *sonyflake.Sonyflake, redis *redis.
 }
 
 func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
+	ctx := context.Background()
 	clientID := c.Locals(auth.CLIENT_ID_CTX_KEY).(string)
 	if clientID == "" {
 		log.Println("Got empty client ID")
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
-	ok, request, err := controller.GetClientRequest(clientID)
+	ok, request, err := controller.GetClientRequest(ctx, clientID)
 	if err != nil {
 		log.Printf("GetClientRequest error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
@@ -49,7 +51,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	if !ok || request.Status == common.FAILED {
 		log.Printf("Client %v last request is failed", clientID)
 		createNewRequest = true
-	} else if request.Status == common.CREATED || request.Status == common.IN_PROGRESS {
+	} else if request.Status == common.CREATED || request.Status == common.IN_PROGRESS || request.Status == common.OCCUPIED {
 		log.Printf("Client %v request is in progress", clientID)
 		createNewRequest = false
 	} else if request.Status == common.DONE {
@@ -61,6 +63,11 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 
 		if err == nil && pending {
 			log.Printf("Client %v reservation is OK, sending server address", clientID)
+			//set back done status for future calls
+			err = controller.UpdateRequest(ctx, request)
+			if err != nil {
+				return c.SendStatus(fiber.StatusInternalServerError)
+			}
 			return c.Status(fiber.StatusOK).SendString(request.Server)
 		} else {
 			log.Printf("Client %v reservation is not pending", clientID)
@@ -72,7 +79,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	}
 
 	if createNewRequest {
-		err = controller.CreateRequest(clientID)
+		err = controller.CreateRequest(ctx, clientID)
 		if err != nil {
 			log.Printf("CreateRequest error: %v", err)
 			return c.SendStatus(fiber.StatusInternalServerError)
@@ -83,33 +90,30 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
-func (controller *Controller) GetClientRequest(clientID string) (bool, common.RequestBody, error) {
+func (controller *Controller) GetClientRequest(ctx context.Context, clientID string) (bool, common.RequestBody, error) {
 	result := common.RequestBody{}
-	count, err := controller.redisClient.Exists(common.GetClientKey(clientID)).Result()
-	if err != nil {
-		return false, result, err
-	}
 
-	if count < 1 {
+	requestID, err := controller.redisClient.Get(ctx, common.GetClientKey(clientID)).Result()
+	if err == redis.Nil {
 		return false, result, nil
+	} else if err != nil {
+		return false, result, err
 	}
 
-	requestID, err := controller.redisClient.Get(common.GetClientKey(clientID)).Result()
+	setArgs := redis.SetArgs{
+		Get: true,
+	}
+	result = common.RequestBody{Status: common.OCCUPIED}
+	bytes, err := json.Marshal(result)
 	if err != nil {
 		return false, result, err
 	}
 
-	count, err = controller.redisClient.Exists(common.GetRequestKey(requestID)).Result()
-	if err != nil {
-		return false, result, err
-	}
-
-	if count < 1 {
+	//get request body and set as OCCUPIED
+	requestJSON, err := controller.redisClient.SetArgs(ctx, common.GetRequestKey(requestID), bytes, setArgs).Result()
+	if err == redis.Nil {
 		return false, result, nil
-	}
-
-	requestJSON, err := controller.redisClient.Get(common.GetRequestKey(requestID)).Result()
-	if err != nil {
+	} else if err != nil {
 		return false, result, err
 	}
 
@@ -119,6 +123,21 @@ func (controller *Controller) GetClientRequest(clientID string) (bool, common.Re
 	}
 
 	return true, result, nil
+}
+
+func (controller *Controller) UpdateRequest(ctx context.Context, request common.RequestBody) error {
+	bytes, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	stringID := strconv.FormatUint(request.ID, 10)
+	err = controller.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (controller *Controller) GetReservationStatus(request common.RequestBody) (bool, error) {
@@ -132,7 +151,7 @@ func (controller *Controller) GetReservationStatus(request common.RequestBody) (
 	return resp.StatusCode == 200, nil
 }
 
-func (controller *Controller) CreateRequest(clientID string) error {
+func (controller *Controller) CreateRequest(ctx context.Context, clientID string) error {
 	id, err := controller.idGenerator.NextID()
 	if err != nil {
 		return err
@@ -145,17 +164,17 @@ func (controller *Controller) CreateRequest(clientID string) error {
 	}
 
 	stringID := strconv.FormatUint(id, 10)
-	err = controller.redisClient.Set(common.GetRequestKey(stringID), string(bytes), 0).Err()
+	err = controller.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
 
-	err = controller.redisClient.Set(common.GetClientKey(clientID), stringID, 0).Err()
+	err = controller.redisClient.Set(ctx, common.GetClientKey(clientID), stringID, 0).Err()
 	if err != nil {
 		return err
 	}
 
-	err = controller.redisClient.LPush(common.REDIS_QUEUE_LIST_KEY, string(bytes)).Err()
+	err = controller.redisClient.LPush(ctx, common.REDIS_QUEUE_LIST_KEY, string(bytes)).Err()
 	if err != nil {
 		return err
 	}

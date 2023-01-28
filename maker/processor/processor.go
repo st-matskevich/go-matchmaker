@@ -17,7 +17,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/common"
 )
 
@@ -74,14 +74,14 @@ func (processor *Processor) Init(redis *redis.Client, docker *client.Client) err
 	return nil
 }
 
-func (processor *Processor) WriteRequest(req *common.RequestBody) error {
+func (processor *Processor) WriteRequest(ctx context.Context, req *common.RequestBody) error {
 	stringID := strconv.FormatUint(req.ID, 10)
 	bytes, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
 
-	processor.redisClient.Set(common.GetRequestKey(stringID), string(bytes), 0).Err()
+	processor.redisClient.Set(ctx, common.GetRequestKey(stringID), string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
@@ -101,14 +101,14 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 		perr := recover()
 		if perr != nil || rerr != nil {
 			request.Status = common.FAILED
-			processor.WriteRequest(&request)
+			processor.WriteRequest(ctx, &request)
 		}
 	}()
 
 	log.Printf("Got request: %v", request)
 
 	request.Status = common.IN_PROGRESS
-	err = processor.WriteRequest(&request)
+	err = processor.WriteRequest(ctx, &request)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	log.Printf("Finished request: %v", request.ID)
 
 	request.Status = common.DONE
-	err = processor.WriteRequest(&request)
+	err = processor.WriteRequest(ctx, &request)
 	if err != nil {
 		return err
 	}

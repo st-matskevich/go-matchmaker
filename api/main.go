@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
-	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/sony/sonyflake"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/api/controller"
@@ -34,7 +35,8 @@ func main() {
 	})
 	defer clientRedis.Close()
 
-	_, err = clientRedis.Ping().Result()
+	ctx := context.Background()
+	_, err = clientRedis.Ping(ctx).Result()
 	if err != nil {
 		log.Fatalf("Redis connection error: %v", err)
 	}
