@@ -1,11 +1,11 @@
 # Go-Matchmaker
 
-Matchmaker for your dockerized servers
+Orchestrator for your containers written in Go. Can be used to orchestrate game servers or virtual machines.
 
 ## Installation
 
-1. Install Docker
-2. Check variables in docker-compose.yml
+1. Install [Docker](https://docs.docker.com/get-docker/)
+2. Check variables in [docker-compose.yml](docker-compose.yml)
 ```yml
 # API service
 # How much service will wait for Reservation API confirmation from created server in ms
@@ -42,7 +42,7 @@ IMAGE_REGISTRY_USERNAME=stmatskevich
 # Image registry password, if authorization not needed leave blank
 IMAGE_REGISTRY_PASSWORD=supersecretpassword
 ```
-4. Create Docker network that was defined as DOCKER_NETWORK in docker-compose.yml. Recommendation: use bridge driver to avoid exposing excess ports
+4. Create Docker network that was defined as `DOCKER_NETWORK` in [docker-compose.yml](docker-compose.yml). Recommendation: use bridge driver to avoid exposing excess ports
 ```sh
 docker network create -d bridge dev-network  
 ```
@@ -98,3 +98,7 @@ docker compose logs maker -f
 ## License
 
 Distributed under the MIT License. See <code>[LICENSE](LICENSE)</code> for more information.
+
+## Contributing
+Want a new feature added? Found a bug?
+Go ahead an open [a new issue](https://github.com/st-matskevich/go-matchmaker/issues/new) or feel free to submit a pull request
