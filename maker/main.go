@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/common"
@@ -48,8 +51,7 @@ func main() {
 		log.Fatalf("Failed to MAX_CONCURRENT_JOBS: %v", err)
 	}
 
-	processor := processor.Processor{}
-	err = processor.Init(clientRedis, clientDocker)
+	processor, err := initProcessor(clientRedis, clientDocker)
 	if err != nil {
 		log.Fatalf("Failed to initialize Processor: %v", err)
 	}
@@ -74,4 +76,52 @@ func main() {
 			<-waitChan
 		}()
 	}
+}
+
+func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Processor, error) {
+	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
+	reservationTimeout, err := strconv.Atoi(timeoutString)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
+
+	hostname := os.Getenv("EXTERNAL_HOSTNAME")
+	if hostname != "" {
+		hostname += ":"
+	}
+
+	imageName := os.Getenv("IMAGE_TO_PULL")
+	dockerNetwork := os.Getenv("DOCKER_NETWORK")
+
+	imageControlPort := os.Getenv("IMAGE_CONTROL_PORT")
+	imageExposedPortString := os.Getenv("IMAGE_EXPOSE_PORT")
+	exposedPort, err := nat.NewPort(nat.SplitProtoPort(imageExposedPortString))
+	if err != nil {
+		return nil, err
+	}
+	imageExposedPort := exposedPort
+
+	imageRegistryUsername := os.Getenv("IMAGE_REGISTRY_USERNAME")
+	imageRegisrtyPassword := os.Getenv("IMAGE_REGISTRY_PASSWORD")
+
+	cooldownString := os.Getenv("LOOKUP_COOLDOWN")
+	lookupCooldownMillisecond, err := strconv.Atoi(cooldownString)
+	if err != nil {
+		return nil, err
+	}
+
+	return &processor.Processor{
+		RedisClient:               redis,
+		DockerClient:              docker,
+		HttpClient:                httpClient,
+		Hostname:                  hostname,
+		ImageName:                 imageName,
+		DockerNetwork:             dockerNetwork,
+		ImageControlPort:          imageControlPort,
+		ImageExposedPort:          imageExposedPort,
+		ImageRegistryUsername:     imageRegistryUsername,
+		ImageRegisrtyPassword:     imageRegisrtyPassword,
+		LookupCooldownMillisecond: lookupCooldownMillisecond,
+	}, nil
 }

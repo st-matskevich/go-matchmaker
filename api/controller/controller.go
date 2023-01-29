@@ -5,36 +5,19 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/common/interfaces"
 )
 
 type Controller struct {
-	redisClient *redis.Client
-	httpClient  *http.Client
+	RedisClient interfaces.RedisClient
+	HttpClient  interfaces.HTTPClient
 
-	imageControlPort string
-}
-
-func (controller *Controller) Init(redis *redis.Client) error {
-	controller.redisClient = redis
-
-	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
-	reservationTimeout, err := strconv.Atoi(timeoutString)
-	if err != nil {
-		return err
-	}
-	controller.httpClient = &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
-
-	controller.imageControlPort = os.Getenv("IMAGE_CONTROL_PORT")
-
-	return nil
+	ImageControlPort string
 }
 
 func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
@@ -108,7 +91,7 @@ func (controller *Controller) GetClientRequest(ctx context.Context, clientID str
 	}
 
 	//get request body and set as OCCUPIED
-	requestJSON, err := controller.redisClient.SetArgs(ctx, clientID, bytes, setArgs).Result()
+	requestJSON, err := controller.RedisClient.SetArgs(ctx, clientID, bytes, setArgs).Result()
 	if err == redis.Nil {
 		return false, result, nil
 	} else if err != nil {
@@ -129,7 +112,7 @@ func (controller *Controller) UpdateRequest(ctx context.Context, request common.
 		return err
 	}
 
-	err = controller.redisClient.Set(ctx, request.ID, string(bytes), 0).Err()
+	err = controller.RedisClient.Set(ctx, request.ID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
@@ -138,9 +121,15 @@ func (controller *Controller) UpdateRequest(ctx context.Context, request common.
 }
 
 func (controller *Controller) GetReservationStatus(request common.RequestBody) (bool, error) {
-	containerURL := "http://" + request.Container + ":" + controller.imageControlPort
+	containerURL := "http://" + request.Container + ":" + controller.ImageControlPort
 	containerURL += "/reservation/" + request.ID
-	resp, err := controller.httpClient.Get(containerURL)
+
+	req, err := http.NewRequest("GET", containerURL, nil)
+	if err != nil {
+		return false, err
+	}
+
+	resp, err := controller.HttpClient.Do(req)
 	if err != nil {
 		return false, err
 	}
@@ -155,12 +144,12 @@ func (controller *Controller) CreateRequest(ctx context.Context, clientID string
 		return err
 	}
 
-	err = controller.redisClient.Set(ctx, clientID, string(bytes), 0).Err()
+	err = controller.RedisClient.Set(ctx, clientID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
 
-	err = controller.redisClient.LPush(ctx, common.REDIS_QUEUE_LIST_KEY, string(bytes)).Err()
+	err = controller.RedisClient.LPush(ctx, common.REDIS_QUEUE_LIST_KEY, string(bytes)).Err()
 	if err != nil {
 		return err
 	}
