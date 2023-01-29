@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
@@ -42,8 +45,7 @@ func main() {
 		auth.New(&auth.DummyAuthorizer{}),
 	)
 
-	controller := controller.Controller{}
-	err = controller.Init(clientRedis)
+	controller, err := initController(clientRedis)
 	if err != nil {
 		log.Fatalf("Failed to initialize Controller: %v", err)
 	}
@@ -51,4 +53,21 @@ func main() {
 	app.Post("/request", controller.HandleCreateRequest)
 
 	log.Fatal(app.Listen(":3000"))
+}
+
+func initController(redis *redis.Client) (*controller.Controller, error) {
+	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
+	reservationTimeout, err := strconv.Atoi(timeoutString)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
+
+	imageControlPort := os.Getenv("IMAGE_CONTROL_PORT")
+
+	return &controller.Controller{
+		RedisClient:      redis,
+		HttpClient:       httpClient,
+		ImageControlPort: imageControlPort,
+	}, nil
 }
