@@ -48,7 +48,7 @@ switch request.status:
 ```bash
 create MAX_CONCURRENT_JOBS goroutines
     # each goroutine
-    for inifinity:
+    for true:
         request = blocking pop on message queue
         update request status to IN_PROGRESS
         for each running container:
