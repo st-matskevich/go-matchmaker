@@ -20,6 +20,8 @@ MAX_CONCURRENT_JOBS: 3
 DOCKER_NETWORK: dev-network
 # How much thread should wait between looking for available containers
 LOOKUP_COOLDOWN: 1000
+# Hostname which returned to  theclient on successful reservation, if blank only port will be returned
+EXTERNAL_HOSTNAME: localhost
 
 # Network for compose is not created automaticaly
 # go-matchmaker containers and your servers should run on same network to be able to interact with each other

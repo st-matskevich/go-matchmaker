@@ -27,6 +27,7 @@ type Processor struct {
 	httpClient   *http.Client
 	creatorMutex sync.Mutex
 
+	hostname         string
 	imageName        string
 	dockerNetwork    string
 	imageControlPort string
@@ -43,9 +44,9 @@ type ContainerInfo struct {
 	ExposedPort string
 }
 
-func FillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
+func (processor *Processor) FillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
 	request.Container = info.Hostname
-	request.Server = "localhost:" + info.ExposedPort
+	request.Server = processor.hostname + info.ExposedPort
 }
 
 func (processor *Processor) Init(redis *redis.Client, docker *client.Client) error {
@@ -58,6 +59,11 @@ func (processor *Processor) Init(redis *redis.Client, docker *client.Client) err
 		return err
 	}
 	processor.httpClient = &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
+
+	processor.hostname = os.Getenv("EXTERNAL_HOSTNAME")
+	if processor.hostname != "" {
+		processor.hostname += ":"
+	}
 
 	processor.imageName = os.Getenv("IMAGE_TO_PULL")
 	processor.dockerNetwork = os.Getenv("DOCKER_NETWORK")
@@ -129,7 +135,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 		}
 
 		if containerInfo.ExposedPort != "" {
-			FillRequestWithContainerInfo(&request, &containerInfo)
+			processor.FillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
@@ -144,7 +150,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 				return errors.New("StartNewContainer didn't return port")
 			}
 
-			FillRequestWithContainerInfo(&request, &containerInfo)
+			processor.FillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
