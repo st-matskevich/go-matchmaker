@@ -52,7 +52,7 @@ func (processor *Processor) WriteRequest(ctx context.Context, req *common.Reques
 		return err
 	}
 
-	processor.RedisClient.Set(ctx, req.ID, string(bytes), 0).Err()
+	err = processor.RedisClient.Set(ctx, req.ID, string(bytes), 0).Err()
 	if err != nil {
 		return err
 	}
@@ -71,6 +71,16 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	defer func() {
 		perr := recover()
 		if perr != nil || rerr != nil {
+			if rerr == nil {
+				switch x := perr.(type) {
+				case string:
+					rerr = errors.New(x)
+				case error:
+					rerr = x
+				default:
+					rerr = errors.New("unknown panic")
+				}
+			}
 			request.Status = common.FAILED
 			processor.WriteRequest(ctx, &request)
 		}
