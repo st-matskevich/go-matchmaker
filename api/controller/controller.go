@@ -79,12 +79,8 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 }
 
 func (controller *Controller) GetClientRequest(ctx context.Context, clientID string) (bool, common.RequestBody, error) {
-	result := common.RequestBody{}
-
-	setArgs := redis.SetArgs{
-		Get: true,
-	}
-	result = common.RequestBody{ID: clientID, Status: common.OCCUPIED}
+	setArgs := redis.SetArgs{Get: true}
+	result := common.RequestBody{ID: clientID, Status: common.OCCUPIED}
 	bytes, err := json.Marshal(result)
 	if err != nil {
 		return false, result, err
