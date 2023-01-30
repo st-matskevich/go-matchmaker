@@ -39,3 +39,17 @@ func (mocked *DockerClientMock) ContainerStart(ctx context.Context, containerID 
 	args := mocked.Called(ctx, containerID, options)
 	return args.Error(0)
 }
+
+type ReadCloserMock struct {
+	mock.Mock
+}
+
+func (mocked *ReadCloserMock) Close() error {
+	args := mocked.Called()
+	return args.Error(0)
+}
+
+func (mocked *ReadCloserMock) Read(p []byte) (n int, err error) {
+	args := mocked.Called(p)
+	return args.Int(0), args.Error(1)
+}
