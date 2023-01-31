@@ -41,12 +41,12 @@ type ContainerInfo struct {
 	ExposedPort string
 }
 
-func (processor *Processor) FillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
+func (processor *Processor) fillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
 	request.Container = info.Hostname
 	request.Server = processor.Hostname + info.ExposedPort
 }
 
-func (processor *Processor) WriteRequest(ctx context.Context, req *common.RequestBody) error {
+func (processor *Processor) writeRequest(ctx context.Context, req *common.RequestBody) error {
 	bytes, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -82,14 +82,14 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 				}
 			}
 			request.Status = common.FAILED
-			processor.WriteRequest(ctx, &request)
+			processor.writeRequest(ctx, &request)
 		}
 	}()
 
 	log.Printf("Got request: %v", request)
 
 	request.Status = common.IN_PROGRESS
-	err = processor.WriteRequest(ctx, &request)
+	err = processor.writeRequest(ctx, &request)
 	if err != nil {
 		return err
 	}
@@ -97,19 +97,19 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	log.Printf("Set request %v status to IN_PROGRESS", request.ID)
 
 	for {
-		containerInfo, err := processor.FindRunningContainer(ctx, request.ID)
+		containerInfo, err := processor.findRunningContainer(ctx, request.ID)
 		if err != nil {
 			return err
 		}
 
 		if containerInfo.ExposedPort != "" {
-			processor.FillRequestWithContainerInfo(&request, &containerInfo)
+			processor.fillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
 		if processor.creatorMutex.TryLock() {
 			defer processor.creatorMutex.Unlock()
-			containerInfo, err = processor.StartNewContainer(ctx, request.ID)
+			containerInfo, err = processor.startNewContainer(ctx, request.ID)
 			if err != nil {
 				return err
 			}
@@ -118,7 +118,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 				return errors.New("StartNewContainer didn't return port")
 			}
 
-			processor.FillRequestWithContainerInfo(&request, &containerInfo)
+			processor.fillRequestWithContainerInfo(&request, &containerInfo)
 			break
 		}
 
@@ -128,7 +128,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	log.Printf("Finished request: %v", request.ID)
 
 	request.Status = common.DONE
-	err = processor.WriteRequest(ctx, &request)
+	err = processor.writeRequest(ctx, &request)
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	return nil
 }
 
-func (processor *Processor) FindRunningContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
+func (processor *Processor) findRunningContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for available containers")
@@ -156,7 +156,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context, requestID 
 			continue
 		}
 
-		reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname, requestID)
+		reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID)
 		if err != nil {
 			log.Printf("Failed reserve request on container %v: %v", container.ID, err)
 			continue
@@ -164,7 +164,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context, requestID 
 
 		if reserved {
 			log.Printf("Found available container %v", container.ID)
-			port, err := processor.GetContainerExposedPort(&containerInfo)
+			port, err := processor.getContainerExposedPort(&containerInfo)
 			if err != nil {
 				log.Printf("Failed exposed port parse on container %v: %v", container.ID, err)
 				continue
@@ -181,7 +181,7 @@ func (processor *Processor) FindRunningContainer(ctx context.Context, requestID 
 	return result, nil
 }
 
-func (processor *Processor) StartNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
+func (processor *Processor) startNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Printf("Looking for exited containers")
@@ -195,15 +195,15 @@ func (processor *Processor) StartNewContainer(ctx context.Context, requestID str
 	if len(containers) > 0 {
 		container := containers[0]
 		log.Printf("Found exited container %v", container.ID)
-		return processor.StartContainer(ctx, requestID, container.ID)
+		return processor.startContainer(ctx, requestID, container.ID)
 	}
 
 	log.Printf("No exited containers available, starting new one")
 
-	return processor.CreateNewContainer(ctx, requestID)
+	return processor.createNewContainer(ctx, requestID)
 }
 
-func (processor *Processor) CreateNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
+func (processor *Processor) createNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 	pullOptions := types.ImagePullOptions{}
 	if processor.ImageRegistryUsername != "" {
@@ -244,10 +244,10 @@ func (processor *Processor) CreateNewContainer(ctx context.Context, requestID st
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	return processor.StartContainer(ctx, requestID, resp.ID)
+	return processor.startContainer(ctx, requestID, resp.ID)
 }
 
-func (processor *Processor) StartContainer(ctx context.Context, requestID string, containerID string) (ContainerInfo, error) {
+func (processor *Processor) startContainer(ctx context.Context, requestID string, containerID string) (ContainerInfo, error) {
 	result := ContainerInfo{}
 
 	log.Println("Starting container")
@@ -261,14 +261,14 @@ func (processor *Processor) StartContainer(ctx context.Context, requestID string
 		return result, err
 	}
 
-	hostPort, err := processor.GetContainerExposedPort(&containerInfo)
+	hostPort, err := processor.getContainerExposedPort(&containerInfo)
 	if err != nil {
 		return result, err
 	}
 
 	log.Printf("Container started on port %v", hostPort)
 
-	reserved, err := processor.ReserveContainer(containerInfo.Config.Hostname, requestID)
+	reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID)
 	if err != nil {
 		return result, err
 	}
@@ -282,7 +282,7 @@ func (processor *Processor) StartContainer(ctx context.Context, requestID string
 	return result, nil
 }
 
-func (processor *Processor) GetContainerExposedPort(containerInfo *types.ContainerJSON) (string, error) {
+func (processor *Processor) getContainerExposedPort(containerInfo *types.ContainerJSON) (string, error) {
 	binding := containerInfo.NetworkSettings.Ports[processor.ImageExposedPort]
 	if len(binding) == 0 {
 		return "", errors.New("no binding found for specified IMAGE_EXPOSE_PORT")
@@ -291,7 +291,7 @@ func (processor *Processor) GetContainerExposedPort(containerInfo *types.Contain
 	return binding[0].HostPort, nil
 }
 
-func (processor *Processor) ReserveContainer(hostname string, requestID string) (bool, error) {
+func (processor *Processor) reserveContainer(hostname string, requestID string) (bool, error) {
 	containerURL := "http://" + hostname + ":" + processor.ImageControlPort
 	containerURL += "/reservation/" + requestID
 
