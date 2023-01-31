@@ -17,6 +17,10 @@ type DockerClientMock struct {
 
 func (mocked *DockerClientMock) ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error) {
 	args := mocked.Called(ctx, options)
+	if len(args) > 2 && args.String(2) != "" {
+		panic(args.String(2))
+	}
+
 	return args.Get(0).([]types.Container), args.Error(1)
 }
 
