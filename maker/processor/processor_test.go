@@ -186,7 +186,7 @@ func TestContainerReservation(t *testing.T) {
 				Status: common.CREATED,
 			}
 
-			requestJSON, err = json.Marshal(requestJSON)
+			requestJSON, err = json.Marshal(request)
 			assert.NoError(t, err)
 
 			err = processor.ProcessMessage(string(requestJSON))
