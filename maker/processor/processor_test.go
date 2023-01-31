@@ -160,7 +160,7 @@ func TestContainerReservation(t *testing.T) {
 			containerURL := "http://" + containerHostname + ":" + containerControlPort
 			containerURL += "/reservation/" + requestID
 			req, err := http.NewRequest("POST", containerURL, nil)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 
 			httpResponse := http.Response{StatusCode: 200}
 			httpMock.On("Do", req).Return(&httpResponse, nil).Once()
@@ -176,9 +176,9 @@ func TestContainerReservation(t *testing.T) {
 				request.Status = common.FAILED
 			}
 
-			bytes, err := json.Marshal(request)
-			assert.Nil(t, err)
-			redisMock.On("Set", mock.Anything, mock.Anything, string(bytes), mock.Anything).Return(&redis.StatusCmd{}).Once()
+			requestJSON, err := json.Marshal(request)
+			assert.NoError(t, err)
+			redisMock.On("Set", mock.Anything, mock.Anything, string(requestJSON), mock.Anything).Return(&redis.StatusCmd{}).Once()
 
 			// create initial request
 			request = common.RequestBody{
@@ -186,10 +186,10 @@ func TestContainerReservation(t *testing.T) {
 				Status: common.CREATED,
 			}
 
-			bytes, err = json.Marshal(request)
-			assert.Nil(t, err)
+			requestJSON, err = json.Marshal(requestJSON)
+			assert.NoError(t, err)
 
-			err = processor.ProcessMessage(string(bytes))
+			err = processor.ProcessMessage(string(requestJSON))
 			assert.Equal(t, err, test.want)
 
 			if test.want == nil {
