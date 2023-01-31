@@ -16,344 +16,188 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func createContainerInspectResponse(hostname string, exposedPort string, bindedPort string) types.ContainerJSON {
-	portMap := make(nat.PortMap)
-	portBinding := nat.PortBinding{HostPort: bindedPort}
-	portMap[nat.Port(exposedPort)] = append(portMap[nat.Port(exposedPort)], portBinding)
+const (
+	RESERVE_RUNNING = 0
+	RESERVE_EXITED  = 1
+	RESERVE_NEW     = 2
+)
 
-	inspectResponse := types.ContainerJSON{}
-	inspectResponse.NetworkSettings = &types.NetworkSettings{}
-	inspectResponse.NetworkSettings.Ports = portMap
-
-	inspectResponse.Config = &container.Config{}
-	inspectResponse.Config.Hostname = hostname
-
-	return inspectResponse
+type ContainerReservationArgs struct {
+	reserveType int
+	err         error
+	panic       string
 }
 
-func createReservationRequest(hostname string, controlPort string, requestID string) (*http.Request, error) {
-	containerURL := "http://" + hostname + ":" + controlPort
-	containerURL += "/reservation/" + requestID
-	return http.NewRequest("POST", containerURL, nil)
-}
-
-func addRedisSetExpectation(t *testing.T, redisMock *mocks.RedisClientMock, request *common.RequestBody, err error) {
-	data := mock.Anything
-	if request != nil {
-		bytes, err := json.Marshal(request)
-		assert.Nil(t, err)
-		data = string(bytes)
+func TestContainerReservation(t *testing.T) {
+	tests := []struct {
+		name string
+		args ContainerReservationArgs
+		want error
+	}{
+		{
+			name: "reserve running",
+			args: ContainerReservationArgs{
+				reserveType: RESERVE_RUNNING,
+				err:         nil,
+				panic:       "",
+			},
+			want: nil,
+		},
+		{
+			name: "reserve exited",
+			args: ContainerReservationArgs{
+				reserveType: RESERVE_EXITED,
+				err:         nil,
+				panic:       "",
+			},
+			want: nil,
+		},
+		{
+			name: "reserve new",
+			args: ContainerReservationArgs{
+				reserveType: RESERVE_NEW,
+				err:         nil,
+				panic:       "",
+			},
+			want: nil,
+		},
+		{
+			name: "error on docker list",
+			args: ContainerReservationArgs{
+				reserveType: RESERVE_RUNNING,
+				err:         errors.New("reserve error"),
+				panic:       "",
+			},
+			want: errors.New("reserve error"),
+		},
+		{
+			name: "panic on docker list",
+			args: ContainerReservationArgs{
+				reserveType: RESERVE_RUNNING,
+				err:         nil,
+				panic:       "reserve panic",
+			},
+			want: errors.New("reserve panic"),
+		},
 	}
 
-	redisStatus := redis.StatusCmd{}
-	redisStatus.SetErr(err)
-	redisMock.On("Set", mock.Anything, mock.Anything, data, mock.Anything).Return(&redisStatus).Once()
-}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requestID := "request1"
+			containerHostname := "container"
+			containerExposedPort := "3000/tcp"
+			containerBindedPort := "34999"
+			containerControlPort := "3000"
+			externalHostname := "localhost"
 
-func TestReserveRunningContainer(t *testing.T) {
-	//expected values
-	requestID := "request1"
-	containerHostname := "container"
-	containerExposedPort := "3000/tcp"
-	containerBindedPort := "34999"
-	containerControlPort := "3000"
-	externalHostname := "localhost"
+			redisMock := mocks.RedisClientMock{}
+			dockerMock := DockerClientMock{}
+			httpMock := mocks.HTTPClientMock{}
+			readCloserMock := ReadCloserMock{}
 
-	redisMock := mocks.RedisClientMock{}
-	dockerMock := DockerClientMock{}
-	httpMock := mocks.HTTPClientMock{}
+			processor := Processor{
+				RedisClient:  &redisMock,
+				DockerClient: &dockerMock,
+				HttpClient:   &httpMock,
 
-	processor := Processor{
-		RedisClient:  &redisMock,
-		DockerClient: &dockerMock,
-		HttpClient:   &httpMock,
+				ImageExposedPort: nat.Port(containerExposedPort),
+				ImageControlPort: containerControlPort,
+				Hostname:         externalHostname + ":",
+			}
 
-		ImageExposedPort: nat.Port(containerExposedPort),
-		ImageControlPort: containerControlPort,
-		Hostname:         externalHostname + ":",
+			// update request to IN_PROGRESS
+			redisMock.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&redis.StatusCmd{}).Once()
+
+			if test.args.reserveType == RESERVE_RUNNING {
+				//return running conatiner
+				containerArray := []types.Container{{}}
+				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, test.args.err, test.args.panic).Once()
+			} else if test.args.reserveType == RESERVE_EXITED {
+				//return no running
+				containerArray := []types.Container{}
+				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, test.args.err, test.args.panic).Once()
+
+				//return exited
+				containerArray = []types.Container{{}}
+				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, nil).Once()
+
+				// start container
+				dockerMock.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+			} else {
+				//return no running
+				containerArray := []types.Container{}
+				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, test.args.err, test.args.panic).Once()
+
+				//return no exited
+				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, nil).Once()
+
+				// pull image
+				readCloserMock.On("Close").Return(nil).Once()
+				dockerMock.On("ImagePull", mock.Anything, mock.Anything, mock.Anything).Return(&readCloserMock, nil).Once()
+
+				// create new container
+				createResponse := container.ContainerCreateCreatedBody{}
+				dockerMock.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(createResponse, nil).Once()
+
+				// start container
+				dockerMock.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+			}
+
+			// inspect to get port and hostname
+			portMap := make(nat.PortMap)
+			portBinding := nat.PortBinding{HostPort: containerBindedPort}
+			portMap[nat.Port(containerExposedPort)] = append(portMap[nat.Port(containerExposedPort)], portBinding)
+
+			inspectResponse := types.ContainerJSON{}
+			inspectResponse.NetworkSettings = &types.NetworkSettings{}
+			inspectResponse.NetworkSettings.Ports = portMap
+
+			inspectResponse.Config = &container.Config{}
+			inspectResponse.Config.Hostname = containerHostname
+			dockerMock.On("ContainerInspect", mock.Anything, mock.Anything).Return(inspectResponse, nil).Once()
+
+			// container reservation request
+			containerURL := "http://" + containerHostname + ":" + containerControlPort
+			containerURL += "/reservation/" + requestID
+			req, err := http.NewRequest("POST", containerURL, nil)
+			assert.Nil(t, err)
+
+			httpResponse := http.Response{StatusCode: 200}
+			httpMock.On("Do", req).Return(&httpResponse, nil).Once()
+
+			// update request to DONE
+			var request common.RequestBody
+			request.ID = requestID
+			if test.want == nil {
+				request.Status = common.DONE
+				request.Server = externalHostname + ":" + containerBindedPort
+				request.Container = containerHostname
+			} else {
+				request.Status = common.FAILED
+			}
+
+			bytes, err := json.Marshal(request)
+			assert.Nil(t, err)
+			redisMock.On("Set", mock.Anything, mock.Anything, string(bytes), mock.Anything).Return(&redis.StatusCmd{}).Once()
+
+			// create initial request
+			request = common.RequestBody{
+				ID:     requestID,
+				Status: common.CREATED,
+			}
+
+			bytes, err = json.Marshal(request)
+			assert.Nil(t, err)
+
+			err = processor.ProcessMessage(string(bytes))
+			assert.Equal(t, err, test.want)
+
+			if test.want == nil {
+				readCloserMock.AssertExpectations(t)
+				redisMock.AssertExpectations(t)
+				dockerMock.AssertExpectations(t)
+				httpMock.AssertExpectations(t)
+			}
+		})
 	}
-
-	// update request to IN_PROGRESS
-	addRedisSetExpectation(t, &redisMock, nil, nil)
-
-	// list running containers
-	listArray := []types.Container{{}}
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(listArray, nil).Once()
-
-	// inspect to get port and hostname
-	inspectResponse := createContainerInspectResponse(containerHostname, containerExposedPort, containerBindedPort)
-	dockerMock.On("ContainerInspect", mock.Anything, mock.Anything).Return(inspectResponse, nil).Once()
-
-	// container reservation request
-	req, err := createReservationRequest(containerHostname, containerControlPort, requestID)
-	assert.Nil(t, err)
-
-	httpResponse := http.Response{StatusCode: 200}
-	httpMock.On("Do", req).Return(&httpResponse, nil).Once()
-
-	// update request to DONE
-	request := common.RequestBody{
-		ID:        requestID,
-		Status:    common.DONE,
-		Server:    externalHostname + ":" + containerBindedPort,
-		Container: containerHostname,
-	}
-
-	addRedisSetExpectation(t, &redisMock, &request, nil)
-
-	// create initial request
-	request = common.RequestBody{
-		ID:     requestID,
-		Status: common.CREATED,
-	}
-
-	bytes, err := json.Marshal(request)
-	assert.Nil(t, err)
-
-	err = processor.ProcessMessage(string(bytes))
-	assert.Nil(t, err)
-
-	redisMock.AssertExpectations(t)
-	dockerMock.AssertExpectations(t)
-	httpMock.AssertExpectations(t)
-}
-
-func TestStartExitedContainer(t *testing.T) {
-	//expected values
-	requestID := "request1"
-	containerHostname := "container"
-	containerExposedPort := "3000/tcp"
-	containerBindedPort := "34999"
-	containerControlPort := "3000"
-	externalHostname := "localhost"
-
-	redisMock := mocks.RedisClientMock{}
-	dockerMock := DockerClientMock{}
-	httpMock := mocks.HTTPClientMock{}
-
-	processor := Processor{
-		RedisClient:  &redisMock,
-		DockerClient: &dockerMock,
-		HttpClient:   &httpMock,
-
-		ImageExposedPort: nat.Port(containerExposedPort),
-		ImageControlPort: containerControlPort,
-		Hostname:         externalHostname + ":",
-	}
-
-	// update request to IN_PROGRESS
-	addRedisSetExpectation(t, &redisMock, nil, nil)
-
-	// list running containers, return empty array
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return([]types.Container{}, nil).Once()
-
-	// list exited containers, return empty array
-	listArray := []types.Container{{}}
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(listArray, nil).Once()
-
-	// start container
-	dockerMock.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-
-	// inspect to get port and hostname
-	inspectResponse := createContainerInspectResponse(containerHostname, containerExposedPort, containerBindedPort)
-	dockerMock.On("ContainerInspect", mock.Anything, mock.Anything).Return(inspectResponse, nil).Once()
-
-	// container reservation request
-	req, err := createReservationRequest(containerHostname, containerControlPort, requestID)
-	assert.Nil(t, err)
-
-	httpResponse := http.Response{StatusCode: 200}
-	httpMock.On("Do", req).Return(&httpResponse, nil).Once()
-
-	// update request to DONE
-	request := common.RequestBody{
-		ID:        requestID,
-		Status:    common.DONE,
-		Server:    externalHostname + ":" + containerBindedPort,
-		Container: containerHostname,
-	}
-
-	addRedisSetExpectation(t, &redisMock, &request, nil)
-
-	// create initial request
-	request = common.RequestBody{
-		ID:     requestID,
-		Status: common.CREATED,
-	}
-
-	bytes, err := json.Marshal(request)
-	assert.Nil(t, err)
-
-	err = processor.ProcessMessage(string(bytes))
-	assert.Nil(t, err)
-
-	redisMock.AssertExpectations(t)
-	dockerMock.AssertExpectations(t)
-	httpMock.AssertExpectations(t)
-}
-
-func TestCreateNewContainer(t *testing.T) {
-	//expected values
-	requestID := "request1"
-	containerHostname := "container"
-	containerExposedPort := "3000/tcp"
-	containerBindedPort := "34999"
-	containerControlPort := "3000"
-	externalHostname := "localhost"
-
-	redisMock := mocks.RedisClientMock{}
-	dockerMock := DockerClientMock{}
-	httpMock := mocks.HTTPClientMock{}
-
-	processor := Processor{
-		RedisClient:  &redisMock,
-		DockerClient: &dockerMock,
-		HttpClient:   &httpMock,
-
-		ImageExposedPort: nat.Port(containerExposedPort),
-		ImageControlPort: containerControlPort,
-		Hostname:         externalHostname + ":",
-	}
-
-	// update request to IN_PROGRESS
-	addRedisSetExpectation(t, &redisMock, nil, nil)
-
-	// list running containers, return empty array
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return([]types.Container{}, nil).Once()
-
-	// list exited containers, return empty array
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return([]types.Container{}, nil).Once()
-
-	// pull image
-	readCloserMock := ReadCloserMock{}
-	readCloserMock.On("Close").Return(nil).Once()
-	dockerMock.On("ImagePull", mock.Anything, mock.Anything, mock.Anything).Return(&readCloserMock, nil).Once()
-
-	// create new container
-	createResponse := container.ContainerCreateCreatedBody{}
-	dockerMock.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(createResponse, nil).Once()
-
-	// start container
-	dockerMock.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-
-	// inspect to get port and hostname
-	inspectResponse := createContainerInspectResponse(containerHostname, containerExposedPort, containerBindedPort)
-	dockerMock.On("ContainerInspect", mock.Anything, mock.Anything).Return(inspectResponse, nil).Once()
-
-	// container reservation request
-	req, err := createReservationRequest(containerHostname, containerControlPort, requestID)
-	assert.Nil(t, err)
-
-	httpResponse := http.Response{StatusCode: 200}
-	httpMock.On("Do", req).Return(&httpResponse, nil).Once()
-
-	// update request to DONE
-	request := common.RequestBody{
-		ID:        requestID,
-		Status:    common.DONE,
-		Server:    externalHostname + ":" + containerBindedPort,
-		Container: containerHostname,
-	}
-
-	addRedisSetExpectation(t, &redisMock, &request, nil)
-
-	// create initial request
-	request = common.RequestBody{
-		ID:     requestID,
-		Status: common.CREATED,
-	}
-
-	bytes, err := json.Marshal(request)
-	assert.Nil(t, err)
-
-	err = processor.ProcessMessage(string(bytes))
-	assert.Nil(t, err)
-
-	readCloserMock.AssertExpectations(t)
-	redisMock.AssertExpectations(t)
-	dockerMock.AssertExpectations(t)
-	httpMock.AssertExpectations(t)
-}
-
-func TestWriteRequestOnError(t *testing.T) {
-	//expected values
-	requestID := "request1"
-	redisMock := mocks.RedisClientMock{}
-	dockerMock := DockerClientMock{}
-	httpMock := mocks.HTTPClientMock{}
-
-	processor := Processor{
-		RedisClient:  &redisMock,
-		DockerClient: &dockerMock,
-		HttpClient:   &httpMock,
-	}
-
-	// throw error on IN_PROGRESS write
-	redisError := errors.New("redis error")
-	addRedisSetExpectation(t, &redisMock, nil, redisError)
-
-	request := common.RequestBody{
-		ID:     requestID,
-		Status: common.FAILED,
-	}
-
-	addRedisSetExpectation(t, &redisMock, &request, nil)
-
-	request = common.RequestBody{
-		ID:     requestID,
-		Status: common.CREATED,
-	}
-
-	bytes, err := json.Marshal(request)
-	assert.Nil(t, err)
-
-	err = processor.ProcessMessage(string(bytes))
-	assert.EqualError(t, err, redisError.Error())
-
-	redisMock.AssertExpectations(t)
-	dockerMock.AssertExpectations(t)
-	httpMock.AssertExpectations(t)
-}
-
-func TestWriteRequestOnPanic(t *testing.T) {
-	//expected values
-	requestID := "request1"
-	redisMock := mocks.RedisClientMock{}
-	dockerMock := DockerClientMock{}
-	httpMock := mocks.HTTPClientMock{}
-
-	processor := Processor{
-		RedisClient:  &redisMock,
-		DockerClient: &dockerMock,
-		HttpClient:   &httpMock,
-	}
-
-	// throw error on IN_PROGRESS write
-	addRedisSetExpectation(t, &redisMock, nil, nil)
-
-	// list running containers, return empty array
-	panicString := "docker panic"
-	dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return([]types.Container{}, nil, panicString).Once()
-
-	request := common.RequestBody{
-		ID:     requestID,
-		Status: common.FAILED,
-	}
-
-	addRedisSetExpectation(t, &redisMock, &request, nil)
-
-	request = common.RequestBody{
-		ID:     requestID,
-		Status: common.CREATED,
-	}
-
-	bytes, err := json.Marshal(request)
-	assert.Nil(t, err)
-
-	err = processor.ProcessMessage(string(bytes))
-	assert.EqualError(t, err, panicString)
-
-	redisMock.AssertExpectations(t)
-	dockerMock.AssertExpectations(t)
-	httpMock.AssertExpectations(t)
 }
