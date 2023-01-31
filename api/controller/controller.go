@@ -28,7 +28,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
-	ok, request, err := controller.GetClientRequest(ctx, clientID)
+	ok, request, err := controller.getClientRequest(ctx, clientID)
 	if err != nil {
 		log.Printf("GetClientRequest error: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
@@ -43,7 +43,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 		log.Printf("Client %v request is in progress", clientID)
 		createNewRequest = false
 	} else if request.Status == common.DONE {
-		pending, err := controller.GetReservationStatus(request)
+		pending, err := controller.getReservationStatus(request)
 		if err != nil {
 			//don't return, maybe just found closed container, create new request
 			log.Printf("Reservation verify error: %v", err)
@@ -52,7 +52,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 		if err == nil && pending {
 			log.Printf("Client %v reservation is OK, sending server address", clientID)
 			//set back done status for future calls
-			err = controller.UpdateRequest(ctx, request)
+			err = controller.updateRequest(ctx, request)
 			if err != nil {
 				return c.SendStatus(fiber.StatusInternalServerError)
 			}
@@ -67,7 +67,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	}
 
 	if createNewRequest {
-		err = controller.CreateRequest(ctx, clientID)
+		err = controller.createRequest(ctx, clientID)
 		if err != nil {
 			log.Printf("CreateRequest error: %v", err)
 			return c.SendStatus(fiber.StatusInternalServerError)
@@ -78,7 +78,7 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
-func (controller *Controller) GetClientRequest(ctx context.Context, clientID string) (bool, common.RequestBody, error) {
+func (controller *Controller) getClientRequest(ctx context.Context, clientID string) (bool, common.RequestBody, error) {
 	setArgs := redis.SetArgs{Get: true}
 	result := common.RequestBody{ID: clientID, Status: common.OCCUPIED}
 	bytes, err := json.Marshal(result)
@@ -102,7 +102,7 @@ func (controller *Controller) GetClientRequest(ctx context.Context, clientID str
 	return true, result, nil
 }
 
-func (controller *Controller) UpdateRequest(ctx context.Context, request common.RequestBody) error {
+func (controller *Controller) updateRequest(ctx context.Context, request common.RequestBody) error {
 	bytes, err := json.Marshal(request)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (controller *Controller) UpdateRequest(ctx context.Context, request common.
 	return nil
 }
 
-func (controller *Controller) GetReservationStatus(request common.RequestBody) (bool, error) {
+func (controller *Controller) getReservationStatus(request common.RequestBody) (bool, error) {
 	containerURL := "http://" + request.Container + ":" + controller.ImageControlPort
 	containerURL += "/reservation/" + request.ID
 
@@ -133,7 +133,7 @@ func (controller *Controller) GetReservationStatus(request common.RequestBody) (
 	return resp.StatusCode == 200, nil
 }
 
-func (controller *Controller) CreateRequest(ctx context.Context, clientID string) error {
+func (controller *Controller) createRequest(ctx context.Context, clientID string) error {
 	body := common.RequestBody{ID: clientID, Status: common.CREATED}
 	bytes, err := json.Marshal(body)
 	if err != nil {
