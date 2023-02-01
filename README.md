@@ -1,5 +1,6 @@
 # Go-Matchmaker
 [![codecov](https://codecov.io/gh/st-matskevich/go-matchmaker/branch/main/graph/badge.svg)](https://codecov.io/gh/st-matskevich/go-matchmaker)
+[![Go Report Card](https://goreportcard.com/badge/github.com/st-matskevich/go-matchmaker)](https://goreportcard.com/report/github.com/st-matskevich/go-matchmaker)
 
 Microservices based orchestrator for your containers written in Go. Can be used to orchestrate game servers or virtual machines.
 
