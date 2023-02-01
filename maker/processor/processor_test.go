@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -23,9 +24,11 @@ const (
 )
 
 type ContainerReservationArgs struct {
-	reserveType int
-	err         error
-	panic       string
+	reserveType      int
+	registryUsername string
+	registryPassword string
+	err              error
+	panic            string
 }
 
 func TestContainerReservation(t *testing.T) {
@@ -58,6 +61,17 @@ func TestContainerReservation(t *testing.T) {
 				reserveType: RESERVE_NEW,
 				err:         nil,
 				panic:       "",
+			},
+			want: nil,
+		},
+		{
+			name: "reserve new with auth",
+			args: ContainerReservationArgs{
+				reserveType:      RESERVE_NEW,
+				registryUsername: "user",
+				registryPassword: "password",
+				err:              nil,
+				panic:            "",
 			},
 			want: nil,
 		},
@@ -100,9 +114,11 @@ func TestContainerReservation(t *testing.T) {
 				DockerClient: &dockerMock,
 				HttpClient:   &httpMock,
 
-				ImageExposedPort: nat.Port(containerExposedPort),
-				ImageControlPort: containerControlPort,
-				Hostname:         externalHostname + ":",
+				ImageExposedPort:      nat.Port(containerExposedPort),
+				ImageControlPort:      containerControlPort,
+				Hostname:              externalHostname + ":",
+				ImageRegistryUsername: test.args.registryUsername,
+				ImageRegisrtyPassword: test.args.registryPassword,
 			}
 
 			// update request to IN_PROGRESS
@@ -131,9 +147,24 @@ func TestContainerReservation(t *testing.T) {
 				//return no exited
 				dockerMock.On("ContainerList", mock.Anything, mock.Anything).Return(containerArray, nil).Once()
 
+				pullData := interface{}(mock.Anything)
+				if test.args.registryUsername != "" {
+					authConfig := types.AuthConfig{
+						Username: test.args.registryUsername,
+						Password: test.args.registryPassword,
+					}
+
+					encodedJSON, err := json.Marshal(authConfig)
+					assert.NoError(t, err)
+
+					pullOptions := types.ImagePullOptions{}
+					pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
+					pullData = interface{}(pullOptions)
+				}
+
 				// pull image
 				readCloserMock.On("Close").Return(nil).Once()
-				dockerMock.On("ImagePull", mock.Anything, mock.Anything, mock.Anything).Return(&readCloserMock, nil).Once()
+				dockerMock.On("ImagePull", mock.Anything, mock.Anything, pullData).Return(&readCloserMock, nil).Once()
 
 				// create new container
 				createResponse := container.ContainerCreateCreatedBody{}
@@ -190,7 +221,7 @@ func TestContainerReservation(t *testing.T) {
 			assert.NoError(t, err)
 
 			err = processor.ProcessMessage(string(requestJSON))
-			assert.Equal(t, err, test.want)
+			assert.Equal(t, test.want, err)
 
 			if test.want == nil {
 				readCloserMock.AssertExpectations(t)
