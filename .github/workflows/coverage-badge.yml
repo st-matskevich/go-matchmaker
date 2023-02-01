@@ -2,6 +2,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
       
 name: Test Go Coverage
 jobs:
@@ -23,14 +26,8 @@ jobs:
         run: |
           go test -v ./... -covermode=count -coverprofile=coverage.out
           go tool cover -func=coverage.out -o=coverage.out
-          
-      - name: Go coverage badge
-        uses: tj-actions/coverage-badge-go@v1
-        with:
-          green: 80
-          filename: coverage.out
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v3
         with:
-          files: ./coverage.out
+          file: coverage.out
