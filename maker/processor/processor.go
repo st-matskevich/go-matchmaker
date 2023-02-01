@@ -72,14 +72,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 		perr := recover()
 		if perr != nil || rerr != nil {
 			if rerr == nil {
-				switch x := perr.(type) {
-				case string:
-					rerr = errors.New(x)
-				case error:
-					rerr = x
-				default:
-					rerr = errors.New("unknown panic")
-				}
+				rerr = common.HandlePanic(perr)
 			}
 			request.Status = common.FAILED
 			processor.writeRequest(ctx, &request)
