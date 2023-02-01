@@ -23,11 +23,7 @@ jobs:
           cache: true
 
       - name: Go test
-        run: |
-          go test -v ./... -covermode=count -coverprofile=coverage.out
-          go tool cover -func=coverage.out -o=coverage.out
+        run: go test -race -coverprofile=coverage.out -covermode=atomic
 
-      - name: Upload to Codecov
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
-        with:
-          file: coverage.out
