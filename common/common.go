@@ -1,5 +1,7 @@
 package common
 
+import "errors"
+
 const (
 	CREATED     = "CREATED"
 	IN_PROGRESS = "IN_PROGRESS"
@@ -17,3 +19,14 @@ type RequestBody struct {
 
 const REDIS_DB_ID = 0
 const REDIS_QUEUE_LIST_KEY = "queue"
+
+func HandlePanic(perr interface{}) error {
+	switch x := perr.(type) {
+	case string:
+		return errors.New(x)
+	case error:
+		return x
+	default:
+		return errors.New("unknown panic")
+	}
+}
