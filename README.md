@@ -110,6 +110,7 @@ See [DOCUMENTATION](DOCUMENTATION.md) for more information.
 - [Moby Project](https://github.com/moby/moby)
 - [Fiber](https://github.com/gofiber/fiber)
 - [go-redis](https://github.com/redis/go-redis)
+- [testify](https://github.com/stretchr/testify)
 - [godotenv](https://github.com/joho/godotenv)
 
 ## License
