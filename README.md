@@ -1,5 +1,5 @@
 # Go-Matchmaker
-[![Сodecov](https://codecov.io/gh/st-matskevich/go-matchmaker/branch/main/graph/badge.svg)](https://codecov.io/gh/st-matskevich/go-matchmaker)
+[![Coverage](https://github.com/st-matskevich/go-matchmaker/wiki/coverage.svg)](https://raw.githack.com/wiki/st-matskevich/go-matchmaker/coverage.html)
 [![Go Report](https://goreportcard.com/badge/github.com/st-matskevich/go-matchmaker)](https://goreportcard.com/report/github.com/st-matskevich/go-matchmaker)
 [![License](https://img.shields.io/github/license/st-matskevich/go-matchmaker)](LICENSE)
 
