@@ -48,6 +48,7 @@ jobs:
         if: steps.finder.outputs.number
         with:
           number: ${{ steps.finder.outputs.pr }}
+          recreate: true
           message: |
             Test on ${{ github.sha }} ended successfully.
             Branch tests coverage: [${{ env.COVERAGE }}%](https://raw.githack.com/wiki/st-matskevich/go-matchmaker/coverage-${{ steps.finder.outputs.number }}.html).
