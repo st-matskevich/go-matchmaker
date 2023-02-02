@@ -23,7 +23,8 @@ jobs:
 
       - name: Calculate coverage
         run: |
-          echo "COVERAGE=$(go tool cover -func coverage.out | tail -1 | grep -Eo '[0-9]+\.[0-9]')" >> $GITHUB_ENV
+          COVERAGE=$(go tool cover -func coverage.out | tail -1 | grep -Eo '[0-9]+\.[0-9]')
+          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
           echo "coverage: $COVERAGE% of statements"
 
       - name: Add PR comment
