@@ -1,20 +1,26 @@
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
+  push:
       
-name: Test Go Coverage
+name: Test and update coverage
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v3
         with:
           ref: ${{ github.head_ref }}
+
+      - name: Checkout wiki
+        uses: actions/checkout@v3
+        with:
+          repository: ${{github.repository}}.wiki
+          path: ./.github/wiki/
+          ref: ${{ github.head_ref }}
+
 
       - name: Go setup
         uses: actions/setup-go@v3
@@ -23,7 +29,37 @@ jobs:
           cache: true
 
       - name: Go test
-        run: go test ./... -race -coverprofile=coverage.out -covermode=atomic
+        run: go test ./... -count 1 -race -coverprofile coverage.out -covermode atomic
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Create icon
+        run: |
+          go tool cover -html coverage.out -o coverage.html
+          COVERAGE=$(go tool cover -func coverage.out | tail -1 | grep -Eo '[0-9]+\.[0-9]')
+          echo "coverage: $COVERAGE% of statements"
+
+          if awk "BEGIN {exit !($COVERAGE >= 90)}"; then
+            COLOR=brightgreen
+          elif awk "BEGIN {exit !($COVERAGE >= 80)}"; then
+            COLOR=green
+          elif awk "BEGIN {exit !($COVERAGE >= 70)}"; then
+            COLOR=yellowgreen
+          elif awk "BEGIN {exit !($COVERAGE >= 60)}"; then
+            COLOR=yellow
+          elif awk "BEGIN {exit !($COVERAGE >= 50)}"; then
+            COLOR=orange
+          else
+            COLOR=red
+          fi
+
+          curl -s "https://img.shields.io/badge/coverage-$COVERAGE%25-$COLOR" > coverage.svg
+
+          mv coverage.svg ./.github/wiki/
+          mv coverage.html ./.github/wiki/
+
+      - name: Commit to Wiki  
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          repository: ./.github/wiki/
+          skip_fetch: true
+          skip_checkout: true
+          branch: ${{ github.head_ref }}
