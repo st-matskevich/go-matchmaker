@@ -12,6 +12,12 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
+      - name: Checkout wiki
+        uses: actions/checkout@v3
+        with:
+          repository: ${{github.repository}}.wiki
+          path: ./.github/wiki/
+
       - name: Go setup
         uses: actions/setup-go@v3
         with:
