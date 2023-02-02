@@ -29,7 +29,7 @@ jobs:
       - name: Add PR comment
         uses: thollander/actions-comment-pull-request@v2
         with:
-        message: |
+          message: |
             **Branch tests coverage: ${{ env.COVERAGE }}**
 
       - name: Create coverage badge
