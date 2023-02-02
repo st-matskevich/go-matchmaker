@@ -1,4 +1,8 @@
-on: [push, pull_request]
+on:
+  pull_request:
+    types: [opened]
+  push:
+  workflow_dispatch:
       
 name: Test and update coverage
 jobs:
@@ -26,14 +30,14 @@ jobs:
           echo "coverage: $COVERAGE% of statements"
 
       - name: Add PR comment
-        if: github.event_name == 'pull_request'
+        if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.event.pull_request != null }}
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: |
             **Branch tests coverage: ${{ env.COVERAGE }}**
 
       - name: Create coverage badge
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')}}
         run: |
           if awk "BEGIN {exit !($COVERAGE >= 90)}"; then
             COLOR=brightgreen
@@ -56,7 +60,7 @@ jobs:
           mv coverage.html ./.github/wiki/
 
       - name: Commit to Wiki  
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           repository: ./.github/wiki/
