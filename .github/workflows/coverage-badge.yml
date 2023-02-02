@@ -37,8 +37,8 @@ jobs:
         with:
           number: ${{ steps.finder.outputs.pr }}
           message: |
-            Test ${{ github.sha }} ended successfully.
-            Branch tests coverage: ${{ env.COVERAGE }}
+            Test on ${{ github.sha }} ended successfully.
+            Branch tests coverage: ${{ env.COVERAGE }}%.
 
       - name: Create coverage badge
         if: github.ref == 'refs/heads/main'
