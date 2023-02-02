@@ -31,6 +31,11 @@ jobs:
         uses: jwalton/gh-find-current-pr@v1
         id: finder
 
+      - name: Save PR coverage
+        if: steps.finder.outputs.number
+        run: |
+          mv coverage.html ./.github/wiki/coverage-${{ steps.finder.outputs.number }}.html
+
       - name: Update coverage comment
         uses: marocchino/sticky-pull-request-comment@v2
         if: steps.finder.outputs.number
@@ -38,7 +43,7 @@ jobs:
           number: ${{ steps.finder.outputs.pr }}
           message: |
             Test on ${{ github.sha }} ended successfully.
-            Branch tests coverage: ${{ env.COVERAGE }}%.
+            Branch tests coverage: [${{ env.COVERAGE }}%](https://raw.githack.com/wiki/st-matskevich/go-matchmaker/coverage-${{ steps.finder.outputs.number }}.html).
 
       - name: Create coverage badge
         if: github.ref == 'refs/heads/main'
