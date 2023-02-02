@@ -24,6 +24,7 @@ jobs:
       - name: Calculate coverage
         run: |
           COVERAGE=$(go tool cover -func coverage.out | tail -1 | grep -Eo '[0-9]+\.[0-9]')
+          go tool cover -html coverage.out -o coverage.html
           echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
           echo "coverage: $COVERAGE% of statements"
 
@@ -45,7 +46,7 @@ jobs:
             Test on ${{ github.sha }} ended successfully.
             Branch tests coverage: [${{ env.COVERAGE }}%](https://raw.githack.com/wiki/st-matskevich/go-matchmaker/coverage-${{ steps.finder.outputs.number }}.html).
 
-      - name: Create coverage badge
+      - name: Create main branch coverage badge
         if: github.ref == 'refs/heads/main'
         run: |
           if awk "BEGIN {exit !($COVERAGE >= 90)}"; then
@@ -63,13 +64,11 @@ jobs:
           fi
 
           curl -s "https://img.shields.io/badge/coverage-$COVERAGE%25-$COLOR" > coverage.svg
-          go tool cover -html coverage.out -o coverage.html
 
           mv coverage.svg ./.github/wiki/
           mv coverage.html ./.github/wiki/
 
-      - name: Commit to Wiki  
-        if: github.ref == 'refs/heads/main'
+      - name: Commit to Wiki
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           repository: ./.github/wiki/
