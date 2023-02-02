@@ -2,9 +2,10 @@ on:
   push:
   workflow_dispatch:
       
-name: Test and update coverage
+name: Test and report coverage
 jobs:
   test:
+    name: Test and report
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
