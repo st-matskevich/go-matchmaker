@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -218,7 +220,17 @@ func (processor *Processor) createNewContainer(ctx context.Context, requestID st
 	if err != nil {
 		return result, err
 	}
-	defer out.Close()
+
+	_, err = io.Copy(os.Stdout, out)
+	if err != nil {
+		return result, err
+	}
+
+	err = out.Close()
+	if err != nil {
+		return result, err
+	}
+
 	log.Println("Image pulled")
 
 	//using limited port range for container port mapping would be much more correct, but:
