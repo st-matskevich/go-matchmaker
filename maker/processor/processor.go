@@ -227,7 +227,10 @@ func (processor *Processor) createNewContainer(ctx context.Context, requestID st
 	//looks like OS is much better in ports management, so to limit available ports using
 	///proc/sys/net/ipv4/ip_local_port_range
 	hostConfig := container.HostConfig{}
-	hostConfig.PublishAllPorts = true
+	portBindings := []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "0"}}
+	hostConfig.PortBindings = make(nat.PortMap)
+	hostConfig.PortBindings[processor.ImageExposedPort] = portBindings
+
 	hostConfig.NetworkMode = container.NetworkMode(processor.DockerNetwork)
 
 	log.Println("Creating continer")
