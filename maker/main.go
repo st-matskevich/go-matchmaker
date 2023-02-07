@@ -79,12 +79,24 @@ func main() {
 }
 
 func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Processor, error) {
-	timeoutString := os.Getenv("RESERVATION_TIMEOUT")
-	reservationTimeout, err := strconv.Atoi(timeoutString)
+	numberString := os.Getenv("RESERVATION_TIMEOUT")
+	reservationTimeout, err := strconv.Atoi(numberString)
 	if err != nil {
 		return nil, err
 	}
 	httpClient := &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
+
+	numberString = os.Getenv("RESERVATION_COOLDOWN")
+	reservationCooldown, err := strconv.Atoi(numberString)
+	if err != nil {
+		return nil, err
+	}
+
+	numberString = os.Getenv("RESERVATION_RETRY_TIMES")
+	reservationRetries, err := strconv.Atoi(numberString)
+	if err != nil {
+		return nil, err
+	}
 
 	imageName := os.Getenv("IMAGE_TO_PULL")
 	dockerNetwork := os.Getenv("DOCKER_NETWORK")
@@ -117,5 +129,7 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		ImageRegistryUsername:     imageRegistryUsername,
 		ImageRegisrtyPassword:     imageRegisrtyPassword,
 		LookupCooldownMillisecond: lookupCooldownMillisecond,
+		ReservationCooldown:       reservationCooldown,
+		ReservationRetries:        reservationRetries,
 	}, nil
 }
