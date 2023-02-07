@@ -18,6 +18,10 @@ RESERVATION_TIMEOUT: 5000
 # Maker service
 # How much service will wait for Reservation API confirmation from created server in ms
 RESERVATION_TIMEOUT: 5000
+# If retrying reservation, how long thread should sleep between requests
+RESERVATION_COOLDOWN: 2000
+# If retrying reservation, how much tries thread can do
+RESERVATION_RETRY_TIMES: 3
 # How much threads should be created for requsets processing
 MAX_CONCURRENT_JOBS: 3
 # Docker network that will be used for starting new containers

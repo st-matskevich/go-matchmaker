@@ -35,6 +35,9 @@ type Processor struct {
 	ImageRegisrtyPassword string
 
 	LookupCooldownMillisecond int
+
+	ReservationRetries  int
+	ReservationCooldown int
 }
 
 type ContainerInfo struct {
@@ -150,7 +153,7 @@ func (processor *Processor) findRunningContainer(ctx context.Context, requestID 
 			continue
 		}
 
-		reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID)
+		reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID, false)
 		if err != nil {
 			log.Printf("Failed reserve request on container %v: %v", container.ID, err)
 			continue
@@ -275,7 +278,7 @@ func (processor *Processor) startContainer(ctx context.Context, requestID string
 
 	log.Printf("Container started on port %v", hostPort)
 
-	reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID)
+	reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID, true)
 	if err != nil {
 		return result, err
 	}
@@ -298,19 +301,30 @@ func (processor *Processor) getContainerExposedPort(containerInfo *types.Contain
 	return binding[0].HostPort, nil
 }
 
-func (processor *Processor) reserveContainer(hostname string, requestID string) (bool, error) {
+func (processor *Processor) reserveContainer(hostname string, requestID string, retry bool) (bool, error) {
 	containerURL := "http://" + hostname + ":" + processor.ImageControlPort
 	containerURL += "/reservation/" + requestID
 
-	req, err := http.NewRequest("POST", containerURL, nil)
-	if err != nil {
-		return false, err
+	var err error
+	retriesCounter := 0
+	for {
+		req, err := http.NewRequest("POST", containerURL, nil)
+		if err != nil {
+			return false, err
+		}
+
+		resp, err := processor.HttpClient.Do(req)
+		if err == nil {
+			return resp.StatusCode == 200, nil
+		}
+
+		retriesCounter++
+		if !retry || retriesCounter >= processor.ReservationRetries {
+			break
+		}
+
+		time.Sleep(time.Duration(processor.ReservationCooldown) * time.Millisecond)
 	}
 
-	resp, err := processor.HttpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-
-	return resp.StatusCode == 200, nil
+	return false, err
 }
