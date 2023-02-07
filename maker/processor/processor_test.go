@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"testing"
 
@@ -163,6 +164,7 @@ func TestContainerReservation(t *testing.T) {
 				}
 
 				// pull image
+				readCloserMock.On("Read", mock.Anything).Return(0, io.EOF).Once()
 				readCloserMock.On("Close").Return(nil).Once()
 				dockerMock.On("ImagePull", mock.Anything, mock.Anything, pullData).Return(&readCloserMock, nil).Once()
 
