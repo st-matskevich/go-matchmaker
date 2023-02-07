@@ -103,7 +103,6 @@ func TestContainerReservation(t *testing.T) {
 			containerExposedPort := "3000/tcp"
 			containerBindedPort := "34999"
 			containerControlPort := "3000"
-			externalHostname := "localhost"
 
 			redisMock := mocks.RedisClientMock{}
 			dockerMock := DockerClientMock{}
@@ -117,7 +116,6 @@ func TestContainerReservation(t *testing.T) {
 
 				ImageExposedPort:      nat.Port(containerExposedPort),
 				ImageControlPort:      containerControlPort,
-				Hostname:              externalHostname + ":",
 				ImageRegistryUsername: test.args.registryUsername,
 				ImageRegisrtyPassword: test.args.registryPassword,
 			}
@@ -203,7 +201,7 @@ func TestContainerReservation(t *testing.T) {
 			request.ID = requestID
 			if test.want == nil {
 				request.Status = common.DONE
-				request.Server = externalHostname + ":" + containerBindedPort
+				request.ServerPort = containerBindedPort
 				request.Container = containerHostname
 			} else {
 				request.Status = common.FAILED

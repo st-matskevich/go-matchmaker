@@ -86,11 +86,6 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 	}
 	httpClient := &http.Client{Timeout: time.Duration(reservationTimeout) * time.Millisecond}
 
-	hostname := os.Getenv("EXTERNAL_HOSTNAME")
-	if hostname != "" {
-		hostname += ":"
-	}
-
 	imageName := os.Getenv("IMAGE_TO_PULL")
 	dockerNetwork := os.Getenv("DOCKER_NETWORK")
 
@@ -115,7 +110,6 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		RedisClient:               redis,
 		DockerClient:              docker,
 		HttpClient:                httpClient,
-		Hostname:                  hostname,
 		ImageName:                 imageName,
 		DockerNetwork:             dockerNetwork,
 		ImageControlPort:          imageControlPort,

@@ -119,15 +119,16 @@ func TestRequestHandling(t *testing.T) {
 				clientID:        "client1",
 				reservationCode: fiber.StatusOK,
 				request: &common.RequestBody{
-					ID:        "client1",
-					Status:    common.DONE,
-					Container: "container1",
-					Server:    "server1:45677",
+					ID:         "client1",
+					Status:     common.DONE,
+					Container:  "container1",
+					ServerPort: "45677",
 				},
 			},
 			want: RequestHandlingWant{
 				code: fiber.StatusOK,
-				body: "server1:45677",
+				//no hostname in test mode
+				body: ":45677",
 			},
 		},
 		{
@@ -136,10 +137,10 @@ func TestRequestHandling(t *testing.T) {
 				clientID:        "client1",
 				reservationCode: fiber.StatusNotFound,
 				request: &common.RequestBody{
-					ID:        "client1",
-					Status:    common.DONE,
-					Container: "container1",
-					Server:    "server1:45677",
+					ID:         "client1",
+					Status:     common.DONE,
+					Container:  "container1",
+					ServerPort: "45677",
 				},
 			},
 			want: RequestHandlingWant{

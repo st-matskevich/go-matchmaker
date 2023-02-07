@@ -26,7 +26,6 @@ type Processor struct {
 	HttpClient   interfaces.HTTPClient
 	creatorMutex sync.Mutex
 
-	Hostname         string
 	ImageName        string
 	DockerNetwork    string
 	ImageControlPort string
@@ -45,7 +44,7 @@ type ContainerInfo struct {
 
 func (processor *Processor) fillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
 	request.Container = info.Hostname
-	request.Server = processor.Hostname + info.ExposedPort
+	request.ServerPort = info.ExposedPort
 }
 
 func (processor *Processor) writeRequest(ctx context.Context, req *common.RequestBody) error {
