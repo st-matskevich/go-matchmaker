@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
@@ -56,7 +57,11 @@ func (controller *Controller) HandleCreateRequest(c *fiber.Ctx) error {
 			if err != nil {
 				return c.SendStatus(fiber.StatusInternalServerError)
 			}
-			return c.Status(fiber.StatusOK).SendString(request.Server)
+
+			//hostname can contain port, remove last :.* part
+			parts := strings.Split(c.Hostname(), ":")
+			hostname := strings.Join(parts[:len(parts)-1], ":") + ":" + request.ServerPort
+			return c.Status(fiber.StatusOK).SendString(hostname)
 		} else {
 			log.Printf("Client %v reservation is not pending", clientID)
 			createNewRequest = true
