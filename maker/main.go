@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/maker/processor"
+	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
 
 func main() {
@@ -118,16 +119,20 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		return nil, err
 	}
 
+	dockerInteractor := interactor.DockerInteractor{
+		DockerClient:          docker,
+		ImageRegistryUsername: imageRegistryUsername,
+		ImageRegisrtyPassword: imageRegisrtyPassword,
+		DockerNetwork:         dockerNetwork,
+		ImageName:             imageName,
+		ImageExposedPort:      imageExposedPort,
+	}
+
 	return &processor.Processor{
 		RedisClient:               redis,
-		DockerClient:              docker,
+		DockerClient:              &dockerInteractor,
 		HttpClient:                httpClient,
-		ImageName:                 imageName,
-		DockerNetwork:             dockerNetwork,
 		ImageControlPort:          imageControlPort,
-		ImageExposedPort:          imageExposedPort,
-		ImageRegistryUsername:     imageRegistryUsername,
-		ImageRegisrtyPassword:     imageRegisrtyPassword,
 		LookupCooldownMillisecond: lookupCooldownMillisecond,
 		ReservationCooldown:       reservationCooldown,
 		ReservationRetries:        reservationRetries,

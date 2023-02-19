@@ -2,37 +2,25 @@ package processor
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/go-connections/nat"
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/interfaces"
+	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
 
 type Processor struct {
 	RedisClient  interfaces.RedisClient
-	DockerClient DockerClient
+	DockerClient interactor.ContainerInteractor
 	HttpClient   interfaces.HTTPClient
 	creatorMutex sync.Mutex
 
-	ImageName        string
-	DockerNetwork    string
 	ImageControlPort string
-	ImageExposedPort nat.Port
-
-	ImageRegistryUsername string
-	ImageRegisrtyPassword string
 
 	LookupCooldownMillisecond int
 
@@ -40,13 +28,8 @@ type Processor struct {
 	ReservationCooldown int
 }
 
-type ContainerInfo struct {
-	Hostname    string
-	ExposedPort string
-}
-
-func (processor *Processor) fillRequestWithContainerInfo(request *common.RequestBody, info *ContainerInfo) {
-	request.Container = info.Hostname
+func (processor *Processor) fillRequestWithContainerInfo(request *common.RequestBody, info *interactor.ContainerInfo) {
+	request.Container = info.Address
 	request.ServerPort = info.ExposedPort
 }
 
@@ -106,7 +89,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 
 		if processor.creatorMutex.TryLock() {
 			defer processor.creatorMutex.Unlock()
-			containerInfo, err = processor.startNewContainer(ctx, request.ID)
+			containerInfo, err = processor.createNewContainer(ctx, request.ID)
 			if err != nil {
 				return err
 			}
@@ -135,170 +118,60 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	return nil
 }
 
-func (processor *Processor) findRunningContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
-	result := ContainerInfo{}
-
+func (processor *Processor) findRunningContainer(ctx context.Context, requestID string) (interactor.ContainerInfo, error) {
 	log.Printf("Looking for available containers")
 
-	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: processor.ImageName}, filters.KeyValuePair{Key: "status", Value: "running"})
-	containers, err := processor.DockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	containers, err := processor.DockerClient.ListContainers()
 	if err != nil {
-		return result, err
+		return interactor.ContainerInfo{}, err
 	}
 
-	for _, container := range containers {
-		containerInfo, err := processor.DockerClient.ContainerInspect(ctx, container.ID)
+	for _, containerID := range containers {
+		containerInfo, err := processor.DockerClient.InspectContainer(containerID)
 		if err != nil {
-			log.Printf("Failed ContainerInspect on container %v: %v", container.ID, err)
+			log.Printf("Failed InspectContainer on container %v: %v", containerID, err)
 			continue
 		}
 
-		reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID, false)
+		reserved, err := processor.reserveContainer(containerInfo.Address, requestID, false)
 		if err != nil {
-			log.Printf("Failed reserve request on container %v: %v", container.ID, err)
+			log.Printf("Failed reserve request on container %v: %v", containerID, err)
 			continue
 		}
 
 		if reserved {
-			log.Printf("Found available container %v", container.ID)
-			port, err := processor.getContainerExposedPort(&containerInfo)
-			if err != nil {
-				log.Printf("Failed exposed port parse on container %v: %v", container.ID, err)
-				continue
-			}
+			log.Printf("Found available container %v", containerID)
 
-			result.Hostname = containerInfo.Config.Hostname
-			result.ExposedPort = port
-			return result, nil
+			return containerInfo, nil
 		}
 	}
 
 	log.Printf("No available containers found")
 
-	return result, nil
+	return interactor.ContainerInfo{}, nil
 }
 
-func (processor *Processor) startNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
-	result := ContainerInfo{}
-
-	log.Printf("Looking for exited containers")
-
-	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: processor.ImageName}, filters.KeyValuePair{Key: "status", Value: "exited"})
-	containers, err := processor.DockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+func (processor *Processor) createNewContainer(ctx context.Context, requestID string) (interactor.ContainerInfo, error) {
+	id, err := processor.DockerClient.CreateContainer()
 	if err != nil {
-		return result, err
+		return interactor.ContainerInfo{}, err
 	}
 
-	if len(containers) > 0 {
-		container := containers[0]
-		log.Printf("Found exited container %v", container.ID)
-		return processor.startContainer(ctx, requestID, container.ID)
-	}
-
-	log.Printf("No exited containers available, starting new one")
-
-	return processor.createNewContainer(ctx, requestID)
-}
-
-func (processor *Processor) createNewContainer(ctx context.Context, requestID string) (ContainerInfo, error) {
-	result := ContainerInfo{}
-	pullOptions := types.ImagePullOptions{}
-	if processor.ImageRegistryUsername != "" {
-		authConfig := types.AuthConfig{
-			Username: processor.ImageRegistryUsername,
-			Password: processor.ImageRegisrtyPassword,
-		}
-
-		encodedJSON, err := json.Marshal(authConfig)
-		if err != nil {
-			return result, err
-		}
-
-		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
-	}
-
-	log.Printf("Pulling image %v", processor.ImageName)
-	out, err := processor.DockerClient.ImagePull(ctx, processor.ImageName, pullOptions)
+	containerInfo, err := processor.DockerClient.InspectContainer(id)
 	if err != nil {
-		return result, err
+		return interactor.ContainerInfo{}, err
 	}
 
-	_, err = io.Copy(os.Stdout, out)
+	reserved, err := processor.reserveContainer(containerInfo.Address, requestID, true)
 	if err != nil {
-		return result, err
-	}
-
-	err = out.Close()
-	if err != nil {
-		return result, err
-	}
-
-	log.Println("Image pulled")
-
-	//using limited port range for container port mapping would be much more correct, but:
-	//1) scanning even 1k ports takes much more time then -P(ublish)
-	//2) docker can fail binding if any(!) of ports in range is already binded
-	//looks like OS is much better in ports management, so to limit available ports using
-	///proc/sys/net/ipv4/ip_local_port_range
-	hostConfig := container.HostConfig{}
-	portBindings := []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "0"}}
-	hostConfig.PortBindings = make(nat.PortMap)
-	hostConfig.PortBindings[processor.ImageExposedPort] = portBindings
-
-	hostConfig.NetworkMode = container.NetworkMode(processor.DockerNetwork)
-
-	log.Println("Creating continer")
-	resp, err := processor.DockerClient.ContainerCreate(ctx, &container.Config{Image: processor.ImageName}, &hostConfig, nil, nil, "")
-	if err != nil {
-		return result, err
-	}
-	log.Printf("Created container %v", resp.ID)
-
-	return processor.startContainer(ctx, requestID, resp.ID)
-}
-
-func (processor *Processor) startContainer(ctx context.Context, requestID string, containerID string) (ContainerInfo, error) {
-	result := ContainerInfo{}
-
-	log.Println("Starting container")
-	err := processor.DockerClient.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
-	if err != nil {
-		return result, err
-	}
-
-	containerInfo, err := processor.DockerClient.ContainerInspect(ctx, containerID)
-	if err != nil {
-		return result, err
-	}
-
-	hostPort, err := processor.getContainerExposedPort(&containerInfo)
-	if err != nil {
-		return result, err
-	}
-
-	log.Printf("Container started on port %v", hostPort)
-
-	reserved, err := processor.reserveContainer(containerInfo.Config.Hostname, requestID, true)
-	if err != nil {
-		return result, err
+		return interactor.ContainerInfo{}, err
 	}
 
 	if !reserved {
-		return result, errors.New("container failed to reserve a slot")
+		return interactor.ContainerInfo{}, errors.New("container failed to reserve a slot")
 	}
 
-	result.Hostname = containerInfo.Config.Hostname
-	result.ExposedPort = hostPort
-	return result, nil
-}
-
-func (processor *Processor) getContainerExposedPort(containerInfo *types.ContainerJSON) (string, error) {
-	binding := containerInfo.NetworkSettings.Ports[processor.ImageExposedPort]
-	if len(binding) == 0 {
-		return "", errors.New("no binding found for specified IMAGE_EXPOSE_PORT")
-	}
-
-	return binding[0].HostPort, nil
+	return containerInfo, nil
 }
 
 func (processor *Processor) reserveContainer(hostname string, requestID string, retry bool) (bool, error) {
