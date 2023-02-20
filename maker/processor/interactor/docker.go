@@ -31,7 +31,7 @@ func (interactor *DockerInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
 
-	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: interactor.ImageName})
+	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: interactor.ImageName}, filters.KeyValuePair{Key: "status", Value: "running"})
 	containers, err := interactor.DockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
 	if err != nil {
 		return result, err
