@@ -27,6 +27,8 @@ type DockerInteractor struct {
 	ImageExposedPort nat.Port
 }
 
+// TODO: add round-robin like sorting of services list before returning?
+// TODO: if running list in null, look for exited?
 func (interactor *DockerInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
