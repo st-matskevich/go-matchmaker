@@ -33,6 +33,7 @@ type SwarmInteractor struct {
 	ImageExposedPort nat.Port
 }
 
+// TODO: add round-robin like sorting of services list before returning?
 func (interactor *SwarmInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
@@ -156,6 +157,7 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	networkAttachment := swarm.NetworkAttachmentConfig{}
 	networkAttachment.Target = interactor.DockerNetwork
 
+	//TODO: maybe let docker handle service restarts?
 	restartPolicy := swarm.RestartPolicy{}
 	restartPolicy.Condition = swarm.RestartPolicyConditionNone
 
