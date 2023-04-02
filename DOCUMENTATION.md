@@ -60,23 +60,8 @@ create MAX_CONCURRENT_JOBS goroutines
                 update request status to DONE
                 return
         
-        # no available running containers, need new one
-        if mutex.tryLock:
-            if any exited container:
-                start container
-                expose port
-                url = container.hostname:port
-                result = send POST to url/reservation/{request-id}
-                if result == 200:
-                    update request hostname to container.hostname
-                    update request status to DONE
-                    return
-                else:
-                    # something wrong with container
-                    # new container should be available for reservation
-                    fatal
-            
-            # no exited containers, start new one
+        # no exited containers, start new one
+        if mutex.tryLock:            
             create container
             start container
             expose port
