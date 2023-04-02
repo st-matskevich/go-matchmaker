@@ -37,6 +37,7 @@ services:
       dockerfile: maker.dockerfile
     environment:
       REDIS_SERVER_URL: redis-db:6379
+      CONTAINER_BACKEND: swarm
       RESERVATION_TIMEOUT: 5000
       RESERVATION_COOLDOWN: 2000
       RESERVATION_RETRY_TIMES: 3

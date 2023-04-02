@@ -16,6 +16,10 @@ Microservices based orchestrator for your containers written in Go. Can be used 
 RESERVATION_TIMEOUT: 5000
 
 # Maker service
+# Type of backend used for containerization, available options:
+# "docker" - use Docker on local machine to orchestrate containers
+# "swarm" - use Docker Swarm cluster to orchestrate containers
+CONTAINER_BACKEND: swarm
 # How long service will wait for Reservation API confirmation from created server in ms
 RESERVATION_TIMEOUT: 5000
 # If retrying reservation, how long thread should sleep between requests
@@ -54,11 +58,16 @@ IMAGE_REGISTRY_USERNAME=stmatskevich
 # Image registry password, if authorization not needed leave blank
 IMAGE_REGISTRY_PASSWORD=supersecretpassword
 ```
-4. Create Docker network that was defined as `DOCKER_NETWORK` in [docker-compose.yml](docker-compose.yml). Recommendation: use bridge driver to avoid exposing excess ports
+4. Create Docker network that was defined as `DOCKER_NETWORK` in [docker-compose.yml](docker-compose.yml). Use "overlay" driver for "swarm" backend and "bridge" driver for "docker" backend
 ```sh
+# Docker backend
 docker network create -d bridge dev-network  
+
+# Swarm backend
+docker network create -d overlay dev-network  
 ```
-5. Run docker compose from root directory
+5. If "swarm" backend is used, [setup Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/)
+6. Run docker compose from root directory
 ```sh
 docker compose up --build -d
 ```
