@@ -12,21 +12,25 @@ Microservices based orchestrator for your containers written in Go. Can be used 
 2. Check variables in [docker-compose.yml](docker-compose.yml)
 ```yml
 # API service
-# How much service will wait for Reservation API confirmation from created server in ms
+# How long service will wait for Reservation API confirmation from created server in ms
 RESERVATION_TIMEOUT: 5000
 
 # Maker service
-# How much service will wait for Reservation API confirmation from created server in ms
+# How long service will wait for Reservation API confirmation from created server in ms
 RESERVATION_TIMEOUT: 5000
 # If retrying reservation, how long thread should sleep between requests
 RESERVATION_COOLDOWN: 2000
-# If retrying reservation, how much tries thread can do
+# If retrying reservation, how many tries thread can do
 RESERVATION_RETRY_TIMES: 3
-# How much threads should be created for requsets processing
+# How long thread should wait between swarm service converge verification requests
+CONVERGE_VERIFY_COOLDOWN: 1000
+# How many tries thread can do to verify swarm service convergence
+CONVERGE_VERIFY_RETRY_TIMES: 10
+# How many threads should be created for requsets processing
 MAX_CONCURRENT_JOBS: 3
 # Docker network that will be used for starting new containers
 DOCKER_NETWORK: dev-network
-# How much thread should wait between looking for available containers
+# How long thread should wait between looking for available containers
 LOOKUP_COOLDOWN: 1000
 
 # Network for compose is not created automaticaly
