@@ -58,7 +58,8 @@ IMAGE_REGISTRY_USERNAME=stmatskevich
 # Image registry password, if authorization not needed leave blank
 IMAGE_REGISTRY_PASSWORD=supersecretpassword
 ```
-4. Create Docker network that was defined as `DOCKER_NETWORK` in [docker-compose.yml](docker-compose.yml). Use "overlay" driver for "swarm" backend and "bridge" driver for "docker" backend
+4. If "swarm" backend is used, [setup Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/)
+5. Create Docker network that was defined as `DOCKER_NETWORK` in [docker-compose.yml](docker-compose.yml). Use "overlay" driver for "swarm" backend and "bridge" driver for "docker" backend
 ```sh
 # Docker backend
 docker network create -d bridge dev-network  
@@ -66,7 +67,6 @@ docker network create -d bridge dev-network
 # Swarm backend
 docker network create -d overlay dev-network  
 ```
-5. If "swarm" backend is used, [setup Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/)
 6. Run docker compose from root directory
 ```sh
 docker compose up --build -d
