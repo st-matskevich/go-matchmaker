@@ -18,10 +18,6 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
-// TODO: restart service can be implemented
-// "update --init"
-// "update --force"
-// "scale 0" && "scale 1"
 type SwarmInteractor struct {
 	DockerClient *client.Client
 
@@ -36,12 +32,10 @@ type SwarmInteractor struct {
 	ConvergeVerifyRetries  int
 }
 
-// TODO: add round-robin like sorting of services list before returning?
 func (interactor *SwarmInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
 
-	//TODO: add filter by label
 	services, err := interactor.DockerClient.ServiceList(ctx, types.ServiceListOptions{Status: true})
 	if err != nil {
 		return result, err
@@ -149,6 +143,8 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	containerSpec := swarm.ContainerSpec{}
 	containerSpec.Image = interactor.ImageName
 
+	//range of ports used for bindings can be limited in
+	///proc/sys/net/ipv4/ip_local_port_range
 	portConfig := swarm.PortConfig{}
 	portConfig.Protocol = swarm.PortConfigProtocol(interactor.ImageExposedPort.Proto())
 	portConfig.PublishedPort = 0
