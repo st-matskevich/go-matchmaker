@@ -18,6 +18,8 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+const SWARM_INTERACTOR = "swarm"
+
 type SwarmInteractor struct {
 	DockerClient *client.Client
 

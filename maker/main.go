@@ -99,19 +99,7 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		return nil, err
 	}
 
-	imageName := os.Getenv("IMAGE_TO_PULL")
-	dockerNetwork := os.Getenv("DOCKER_NETWORK")
-
 	imageControlPort := os.Getenv("IMAGE_CONTROL_PORT")
-	imageExposedPortString := os.Getenv("IMAGE_EXPOSE_PORT")
-	exposedPort, err := nat.NewPort(nat.SplitProtoPort(imageExposedPortString))
-	if err != nil {
-		return nil, err
-	}
-	imageExposedPort := exposedPort
-
-	imageRegistryUsername := os.Getenv("IMAGE_REGISTRY_USERNAME")
-	imageRegisrtyPassword := os.Getenv("IMAGE_REGISTRY_PASSWORD")
 
 	cooldownString := os.Getenv("LOOKUP_COOLDOWN")
 	lookupCooldown, err := strconv.Atoi(cooldownString)
@@ -119,7 +107,38 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		return nil, err
 	}
 
-	numberString = os.Getenv("CONVERGE_VERIFY_COOLDOWN")
+	dockerInteractor, err := initInteractor(docker)
+	if err != nil {
+		return nil, err
+	}
+
+	return &processor.Processor{
+		RedisClient:         redis,
+		DockerClient:        dockerInteractor,
+		HttpClient:          httpClient,
+		ImageControlPort:    imageControlPort,
+		LookupCooldown:      lookupCooldown,
+		ReservationCooldown: reservationCooldown,
+		ReservationRetries:  reservationRetries,
+	}, nil
+}
+
+func initInteractor(docker *client.Client) (interactor.ContainerInteractor, error) {
+	interactorType := os.Getenv("CONTAINER_BACKEND")
+
+	imageName := os.Getenv("IMAGE_TO_PULL")
+	imageRegistryUsername := os.Getenv("IMAGE_REGISTRY_USERNAME")
+	imageRegisrtyPassword := os.Getenv("IMAGE_REGISTRY_PASSWORD")
+	dockerNetwork := os.Getenv("DOCKER_NETWORK")
+
+	imageExposedPortString := os.Getenv("IMAGE_EXPOSE_PORT")
+	exposedPort, err := nat.NewPort(nat.SplitProtoPort(imageExposedPortString))
+	if err != nil {
+		return nil, err
+	}
+	imageExposedPort := exposedPort
+
+	numberString := os.Getenv("CONVERGE_VERIFY_COOLDOWN")
 	convergeVerifyCooldown, err := strconv.Atoi(numberString)
 	if err != nil {
 		return nil, err
@@ -131,24 +150,30 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 		return nil, err
 	}
 
-	dockerInteractor := interactor.SwarmInteractor{
-		DockerClient:           docker,
-		ImageRegistryUsername:  imageRegistryUsername,
-		ImageRegisrtyPassword:  imageRegisrtyPassword,
-		DockerNetwork:          dockerNetwork,
-		ImageName:              imageName,
-		ImageExposedPort:       imageExposedPort,
-		ConvergeVerifyCooldown: convergeVerifyCooldown,
-		ConvergeVerifyRetries:  convergeVerifyRetries,
+	switch interactorType {
+	case interactor.DOCKER_INTERACTOR:
+		log.Println("Starting on docker")
+		return &interactor.DockerInteractor{
+			DockerClient:          docker,
+			ImageRegistryUsername: imageRegistryUsername,
+			ImageRegisrtyPassword: imageRegisrtyPassword,
+			DockerNetwork:         dockerNetwork,
+			ImageName:             imageName,
+			ImageExposedPort:      imageExposedPort,
+		}, nil
+	case interactor.SWARM_INTERACTOR:
+		log.Println("Starting on swarm")
+		return &interactor.SwarmInteractor{
+			DockerClient:           docker,
+			ImageRegistryUsername:  imageRegistryUsername,
+			ImageRegisrtyPassword:  imageRegisrtyPassword,
+			DockerNetwork:          dockerNetwork,
+			ImageName:              imageName,
+			ImageExposedPort:       imageExposedPort,
+			ConvergeVerifyCooldown: convergeVerifyCooldown,
+			ConvergeVerifyRetries:  convergeVerifyRetries,
+		}, nil
+	default:
+		panic("unknown interactor type")
 	}
-
-	return &processor.Processor{
-		RedisClient:         redis,
-		DockerClient:        &dockerInteractor,
-		HttpClient:          httpClient,
-		ImageControlPort:    imageControlPort,
-		LookupCooldown:      lookupCooldown,
-		ReservationCooldown: reservationCooldown,
-		ReservationRetries:  reservationRetries,
-	}, nil
 }

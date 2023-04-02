@@ -16,6 +16,8 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+const DOCKER_INTERACTOR = "docker"
+
 type DockerInteractor struct {
 	DockerClient *client.Client
 
