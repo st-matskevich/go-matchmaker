@@ -22,7 +22,7 @@ type Processor struct {
 
 	ImageControlPort string
 
-	LookupCooldownMillisecond int
+	LookupCooldown int
 
 	ReservationRetries  int
 	ReservationCooldown int
@@ -102,7 +102,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 			break
 		}
 
-		time.Sleep(time.Duration(processor.LookupCooldownMillisecond) * time.Millisecond)
+		time.Sleep(time.Duration(processor.LookupCooldown) * time.Millisecond)
 	}
 
 	log.Printf("Finished request: %v", request.ID)

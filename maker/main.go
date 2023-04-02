@@ -114,27 +114,41 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 	imageRegisrtyPassword := os.Getenv("IMAGE_REGISTRY_PASSWORD")
 
 	cooldownString := os.Getenv("LOOKUP_COOLDOWN")
-	lookupCooldownMillisecond, err := strconv.Atoi(cooldownString)
+	lookupCooldown, err := strconv.Atoi(cooldownString)
 	if err != nil {
 		return nil, err
 	}
 
-	dockerInteractor := interactor.DockerInteractor{
-		DockerClient:          docker,
-		ImageRegistryUsername: imageRegistryUsername,
-		ImageRegisrtyPassword: imageRegisrtyPassword,
-		DockerNetwork:         dockerNetwork,
-		ImageName:             imageName,
-		ImageExposedPort:      imageExposedPort,
+	numberString = os.Getenv("CONVERGE_VERIFY_COOLDOWN")
+	convergeVerifyCooldown, err := strconv.Atoi(numberString)
+	if err != nil {
+		return nil, err
+	}
+
+	numberString = os.Getenv("CONVERGE_VERIFY_RETRY_TIMES")
+	convergeVerifyRetries, err := strconv.Atoi(numberString)
+	if err != nil {
+		return nil, err
+	}
+
+	dockerInteractor := interactor.SwarmInteractor{
+		DockerClient:           docker,
+		ImageRegistryUsername:  imageRegistryUsername,
+		ImageRegisrtyPassword:  imageRegisrtyPassword,
+		DockerNetwork:          dockerNetwork,
+		ImageName:              imageName,
+		ImageExposedPort:       imageExposedPort,
+		ConvergeVerifyCooldown: convergeVerifyCooldown,
+		ConvergeVerifyRetries:  convergeVerifyRetries,
 	}
 
 	return &processor.Processor{
-		RedisClient:               redis,
-		DockerClient:              &dockerInteractor,
-		HttpClient:                httpClient,
-		ImageControlPort:          imageControlPort,
-		LookupCooldownMillisecond: lookupCooldownMillisecond,
-		ReservationCooldown:       reservationCooldown,
-		ReservationRetries:        reservationRetries,
+		RedisClient:         redis,
+		DockerClient:        &dockerInteractor,
+		HttpClient:          httpClient,
+		ImageControlPort:    imageControlPort,
+		LookupCooldown:      lookupCooldown,
+		ReservationCooldown: reservationCooldown,
+		ReservationRetries:  reservationRetries,
 	}, nil
 }
