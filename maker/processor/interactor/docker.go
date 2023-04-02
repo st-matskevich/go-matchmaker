@@ -27,8 +27,6 @@ type DockerInteractor struct {
 	ImageExposedPort nat.Port
 }
 
-// TODO: add round-robin like sorting of services list before returning?
-// TODO: if running list in null, look for exited?
 func (interactor *DockerInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
@@ -101,10 +99,7 @@ func (interactor *DockerInteractor) CreateContainer() (string, error) {
 
 	log.Println("Image pulled")
 
-	//using limited port range for container port mapping would be much more correct, but:
-	//1) scanning even 1k ports takes much more time then -P(ublish)
-	//2) docker can fail binding if any(!) of ports in range is already binded
-	//looks like OS is much better in ports management, so to limit available ports using
+	//range of ports used for bindings can be limited in
 	///proc/sys/net/ipv4/ip_local_port_range
 	hostConfig := container.HostConfig{}
 	portBindings := []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "0"}}
