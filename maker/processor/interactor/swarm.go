@@ -31,6 +31,9 @@ type SwarmInteractor struct {
 	DockerNetwork    string
 	ImageName        string
 	ImageExposedPort nat.Port
+
+	ConvergeVerifyCooldown int
+	ConvergeVerifyRetries  int
 }
 
 // TODO: add round-robin like sorting of services list before returning?
@@ -175,8 +178,7 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	}
 
 	//wait for converge
-	//TODO: add retries limit?
-	//TODO: add wait time?
+	retriesCounter := 0
 	for {
 		task, err := interactor.getServiceTask(response.ID)
 		if err != nil {
@@ -187,10 +189,13 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 			continue
 		}
 
+		retriesCounter++
 		if task.Status.ContainerStatus != nil {
 			break
+		} else if retriesCounter >= interactor.ConvergeVerifyRetries {
+			return "", errors.New("could not receive service status")
 		} else {
-			time.Sleep(time.Duration(1000) * time.Millisecond)
+			time.Sleep(time.Duration(interactor.ConvergeVerifyCooldown) * time.Millisecond)
 		}
 	}
 	log.Printf("Created service %v", response.ID)
