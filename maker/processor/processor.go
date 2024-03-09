@@ -2,7 +2,6 @@ package processor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -10,15 +9,17 @@ import (
 	"time"
 
 	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/common/interfaces"
 	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
 
 type Processor struct {
-	RedisClient  interfaces.RedisClient
+	DataProvider data.DataProvider
 	DockerClient interactor.ContainerInteractor
 	HttpClient   interfaces.HTTPClient
-	creatorMutex sync.Mutex
+
+	MaxJobs int
 
 	ImageControlPort string
 
@@ -26,6 +27,8 @@ type Processor struct {
 
 	ReservationRetries  int
 	ReservationCooldown int
+
+	creatorMutex sync.Mutex
 }
 
 func (processor *Processor) fillRequestWithContainerInfo(request *common.RequestBody, info *interactor.ContainerInfo) {
@@ -33,48 +36,52 @@ func (processor *Processor) fillRequestWithContainerInfo(request *common.Request
 	request.ServerPort = info.ExposedPort
 }
 
-func (processor *Processor) writeRequest(ctx context.Context, req *common.RequestBody) error {
-	bytes, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
+func (processor *Processor) Process() error {
+	log.Printf("Starting processing messages in %v jobs", processor.MaxJobs)
 
-	err = processor.RedisClient.Set(ctx, req.ID, string(bytes), 0).Err()
-	if err != nil {
-		return err
-	}
+	waitChan := make(chan struct{}, processor.MaxJobs)
+	for {
+		waitChan <- struct{}{}
+		go func() {
+			val, err := processor.DataProvider.ListPop()
+			if err != nil {
+				log.Printf("Redis brpop error: %v", err)
+			}
 
-	return nil
+			err = processor.processMessage(val)
+			if err != nil {
+				log.Printf("Failed to process request (%v): %v", val, err)
+			}
+
+			<-waitChan
+		}()
+	}
 }
 
-func (processor *Processor) ProcessMessage(message string) (rerr error) {
-	var request common.RequestBody
+func (processor *Processor) processMessage(ID string) (rerr error) {
 	ctx := context.Background()
-	err := json.Unmarshal([]byte(message), &request)
-	if err != nil {
-		return err
-	}
-
 	defer func() {
 		perr := recover()
 		if perr != nil || rerr != nil {
 			if rerr == nil {
 				rerr = common.HandlePanic(perr)
 			}
-			request.Status = common.FAILED
-			processor.writeRequest(ctx, &request)
+			locker := common.RequestBody{ID: ID, Status: common.FAILED}
+			processor.DataProvider.Set(locker)
 		}
 	}()
 
-	log.Printf("Got request: %v", request)
-
-	request.Status = common.IN_PROGRESS
-	err = processor.writeRequest(ctx, &request)
+	locker := common.RequestBody{ID: ID, Status: common.IN_PROGRESS}
+	request, err := processor.DataProvider.Set(locker)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Set request %v status to IN_PROGRESS", request.ID)
+	if request == nil {
+		return errors.New("cannot get request")
+	}
+
+	log.Printf("Starting processing request %v", request.ID)
 
 	for {
 		containerInfo, err := processor.findRunningContainer(ctx, request.ID)
@@ -83,7 +90,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 		}
 
 		if containerInfo.ExposedPort != "" {
-			processor.fillRequestWithContainerInfo(&request, &containerInfo)
+			processor.fillRequestWithContainerInfo(request, &containerInfo)
 			break
 		}
 
@@ -98,7 +105,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 				return errors.New("StartNewContainer didn't return port")
 			}
 
-			processor.fillRequestWithContainerInfo(&request, &containerInfo)
+			processor.fillRequestWithContainerInfo(request, &containerInfo)
 			break
 		}
 
@@ -108,7 +115,7 @@ func (processor *Processor) ProcessMessage(message string) (rerr error) {
 	log.Printf("Finished request: %v", request.ID)
 
 	request.Status = common.DONE
-	err = processor.writeRequest(ctx, &request)
+	_, err = processor.DataProvider.Set(*request)
 	if err != nil {
 		return err
 	}

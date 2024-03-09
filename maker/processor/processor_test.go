@@ -1,13 +1,12 @@
 package processor
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/common/mocks"
 	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 	"github.com/stretchr/testify/assert"
@@ -89,20 +88,24 @@ func TestContainerReservation(t *testing.T) {
 			containerBindedPort := "34999"
 			containerControlPort := "3000"
 
-			redisMock := mocks.RedisClientMock{}
+			dataProvider := data.MockDataProvider{}
 			dockerMock := interactor.MockInteractor{}
 			httpMock := mocks.HTTPClientMock{}
 
 			processor := Processor{
-				RedisClient:  &redisMock,
+				DataProvider: &dataProvider,
 				DockerClient: &dockerMock,
 				HttpClient:   &httpMock,
 
 				ImageControlPort: containerControlPort,
 			}
 
+			var request common.RequestBody
+			request.ID = requestID
+			request.Status = common.CREATED
+
 			// update request to IN_PROGRESS
-			redisMock.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&redis.StatusCmd{}).Once()
+			dataProvider.On("Set", mock.Anything).Return(&request, nil).Once()
 
 			if test.args.reserveType == RESERVE_RUNNING {
 				containerArray := []string{""}
@@ -128,34 +131,14 @@ func TestContainerReservation(t *testing.T) {
 			httpMock.On("Do", req).Return(&httpResponse, nil).Once()
 
 			// update request to DONE
-			var request common.RequestBody
-			request.ID = requestID
-			if test.want == nil {
-				request.Status = common.DONE
-				request.ServerPort = containerBindedPort
-				request.Container = containerHostname
-			} else {
-				request.Status = common.FAILED
-			}
-
-			requestJSON, err := json.Marshal(request)
-			assert.NoError(t, err)
-			redisMock.On("Set", mock.Anything, mock.Anything, string(requestJSON), mock.Anything).Return(&redis.StatusCmd{}).Once()
+			dataProvider.On("Set", mock.Anything).Return(nil, nil).Once()
 
 			// create initial request
-			request = common.RequestBody{
-				ID:     requestID,
-				Status: common.CREATED,
-			}
-
-			requestJSON, err = json.Marshal(request)
-			assert.NoError(t, err)
-
-			err = processor.ProcessMessage(string(requestJSON))
+			err = processor.processMessage(requestID)
 			assert.Equal(t, test.want, err)
 
 			if test.want == nil {
-				redisMock.AssertExpectations(t)
+				dataProvider.AssertExpectations(t)
 				dockerMock.AssertExpectations(t)
 				httpMock.AssertExpectations(t)
 			}
