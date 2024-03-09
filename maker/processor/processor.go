@@ -10,14 +10,14 @@ import (
 
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
-	"github.com/st-matskevich/go-matchmaker/common/interfaces"
+	"github.com/st-matskevich/go-matchmaker/common/web"
 	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
 
 type Processor struct {
 	DataProvider data.DataProvider
 	DockerClient interactor.ContainerInteractor
-	HttpClient   interfaces.HTTPClient
+	HttpClient   web.HTTPClient
 
 	MaxJobs int
 

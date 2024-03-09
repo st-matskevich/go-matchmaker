@@ -9,7 +9,7 @@ import (
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
-	"github.com/st-matskevich/go-matchmaker/common/mocks"
+	"github.com/st-matskevich/go-matchmaker/common/web"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -154,7 +154,7 @@ func TestRequestHandling(t *testing.T) {
 			containerControlPort := "3000"
 
 			dataProvider := data.MockDataProvider{}
-			httpMock := mocks.HTTPClientMock{}
+			httpMock := web.HTTPClientMock{}
 
 			controller := Controller{
 				DataProvider:     &dataProvider,

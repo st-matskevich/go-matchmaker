@@ -1,8 +1,6 @@
-package interfaces
+package web
 
-import (
-	"net/http"
-)
+import "net/http"
 
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)

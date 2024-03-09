@@ -7,7 +7,7 @@ import (
 
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
-	"github.com/st-matskevich/go-matchmaker/common/mocks"
+	"github.com/st-matskevich/go-matchmaker/common/web"
 	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -90,7 +90,7 @@ func TestContainerReservation(t *testing.T) {
 
 			dataProvider := data.MockDataProvider{}
 			dockerMock := interactor.MockInteractor{}
-			httpMock := mocks.HTTPClientMock{}
+			httpMock := web.HTTPClientMock{}
 
 			processor := Processor{
 				DataProvider: &dataProvider,
