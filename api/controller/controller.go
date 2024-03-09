@@ -9,12 +9,12 @@ import (
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
-	"github.com/st-matskevich/go-matchmaker/common/interfaces"
+	"github.com/st-matskevich/go-matchmaker/common/web"
 )
 
 type Controller struct {
 	DataProvider data.DataProvider
-	HttpClient   interfaces.HTTPClient
+	HttpClient   web.HTTPClient
 
 	ImageControlPort string
 }
