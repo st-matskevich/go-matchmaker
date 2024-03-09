@@ -17,9 +17,6 @@ type RequestBody struct {
 	Container  string `json:"container,omitempty"`
 }
 
-const REDIS_DB_ID = 0
-const REDIS_QUEUE_LIST_KEY = "queue"
-
 func HandlePanic(perr interface{}) error {
 	switch x := perr.(type) {
 	case string:

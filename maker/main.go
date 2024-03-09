@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
@@ -11,8 +10,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/joho/godotenv"
-	"github.com/redis/go-redis/v9"
-	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/maker/processor"
 	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
@@ -33,53 +31,27 @@ func main() {
 	log.Println("Connected to Docker")
 
 	redisServerURL := os.Getenv("REDIS_SERVER_URL")
-	clientRedis := redis.NewClient(&redis.Options{
-		Addr: redisServerURL,
-		DB:   common.REDIS_DB_ID,
-	})
-	defer clientRedis.Close()
-
-	ctx := context.Background()
-	_, err = clientRedis.Ping(ctx).Result()
+	clientRedis, err := data.CreateRedisDataProvider(redisServerURL)
 	if err != nil {
 		log.Fatalf("Redis connection error: %v", err)
 	}
 
 	log.Println("Connected to Redis")
 
-	maxJobs, err := strconv.Atoi(os.Getenv("MAX_CONCURRENT_JOBS"))
-	if err != nil {
-		log.Fatalf("Failed to MAX_CONCURRENT_JOBS: %v", err)
-	}
-
 	processor, err := initProcessor(clientRedis, clientDocker)
 	if err != nil {
 		log.Fatalf("Failed to initialize Processor: %v", err)
 	}
 
-	log.Printf("Starting processing messages in %v jobs", maxJobs)
-
-	waitChan := make(chan struct{}, maxJobs)
-	for {
-		waitChan <- struct{}{}
-		go func() {
-			val, err := clientRedis.BRPop(ctx, 0, common.REDIS_QUEUE_LIST_KEY).Result()
-			if err != nil {
-				log.Printf("Redis brpop error: %v", err)
-			}
-
-			message := val[1]
-			err = processor.ProcessMessage(message)
-			if err != nil {
-				log.Printf("Failed to process message (%v): %v", message, err)
-			}
-
-			<-waitChan
-		}()
-	}
+	log.Fatal(processor.Process())
 }
 
-func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Processor, error) {
+func initProcessor(dataProvider data.DataProvider, docker *client.Client) (*processor.Processor, error) {
+	maxJobs, err := strconv.Atoi(os.Getenv("MAX_CONCURRENT_JOBS"))
+	if err != nil {
+		return nil, err
+	}
+
 	numberString := os.Getenv("RESERVATION_TIMEOUT")
 	reservationTimeout, err := strconv.Atoi(numberString)
 	if err != nil {
@@ -113,9 +85,10 @@ func initProcessor(redis *redis.Client, docker *client.Client) (*processor.Proce
 	}
 
 	return &processor.Processor{
-		RedisClient:         redis,
+		DataProvider:        dataProvider,
 		DockerClient:        dockerInteractor,
 		HttpClient:          httpClient,
+		MaxJobs:             maxJobs,
 		ImageControlPort:    imageControlPort,
 		LookupCooldown:      lookupCooldown,
 		ReservationCooldown: reservationCooldown,

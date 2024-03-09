@@ -1,15 +1,14 @@
 package controller
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/st-matskevich/go-matchmaker/api/auth"
 	"github.com/st-matskevich/go-matchmaker/common"
+	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/common/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -154,27 +153,18 @@ func TestRequestHandling(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			containerControlPort := "3000"
 
-			redisMock := mocks.RedisClientMock{}
+			dataProvider := data.MockDataProvider{}
 			httpMock := mocks.HTTPClientMock{}
 
 			controller := Controller{
-				RedisClient:      &redisMock,
+				DataProvider:     &dataProvider,
 				HttpClient:       &httpMock,
 				ImageControlPort: containerControlPort,
 			}
 
-			redisStatus := &redis.StatusCmd{}
-			if test.args.request != nil {
-				requestJSON, err := json.Marshal(test.args.request)
-				assert.Nil(t, err)
-				redisStatus.SetVal(string(requestJSON))
-			} else {
-				redisStatus.SetErr(redis.Nil)
-			}
-
 			//set with get on request
 			if test.args.clientID != "" {
-				redisMock.On("SetArgs", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(redisStatus).Once()
+				dataProvider.On("Set", mock.Anything).Return(test.args.request, nil).Once()
 			}
 
 			if test.args.request != nil && test.args.request.Status == common.DONE {
@@ -189,18 +179,18 @@ func TestRequestHandling(t *testing.T) {
 
 				if test.args.reservationCode == fiber.StatusOK {
 					//expect request update
-					redisMock.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&redis.StatusCmd{}).Once()
+					dataProvider.On("Set", mock.Anything).Return(nil, nil).Once()
 				} else {
 					//expect new request
-					redisMock.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&redis.StatusCmd{}).Once()
-					redisMock.On("LPush", mock.Anything, mock.Anything, mock.Anything).Return(&redis.IntCmd{}).Once()
+					dataProvider.On("Set", mock.Anything).Return(nil, nil).Once()
+					dataProvider.On("ListPush", mock.Anything).Return(nil).Once()
 				}
 			}
 
 			if test.args.request == nil || test.args.request.Status == common.FAILED {
 				//expect new request
-				redisMock.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&redis.StatusCmd{}).Once()
-				redisMock.On("LPush", mock.Anything, mock.Anything, mock.Anything).Return(&redis.IntCmd{}).Once()
+				dataProvider.On("Set", mock.Anything).Return(nil, nil).Once()
+				dataProvider.On("ListPush", mock.Anything).Return(nil).Once()
 			}
 
 			app := fiber.New()
@@ -223,7 +213,7 @@ func TestRequestHandling(t *testing.T) {
 				assert.Equal(t, test.want.body, string(bodyBytes))
 			}
 
-			redisMock.AssertExpectations(t)
+			dataProvider.AssertExpectations(t)
 			httpMock.AssertExpectations(t)
 		})
 	}
