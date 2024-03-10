@@ -2,16 +2,56 @@ on:
   push:
   workflow_dispatch:
       
-name: Test and report coverage
+name: matchmaker-ci
 jobs:
+  build-api:
+    runs-on: ubuntu-latest 
+
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Go setup
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.x'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          working-directory: ./api
+
+      - name: Build
+        run: go build -ldflags="-s -w" -o main ./api/main.go
+
+  build-maker:
+    runs-on: ubuntu-latest 
+
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Go setup
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.x'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          working-directory: ./api
+
+      - name: Build
+        run: go build -ldflags="-s -w" -o main ./maker/main.go
+
   test:
-    name: Test and report
+    needs: [build-api, build-maker]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
 
       - name: Checkout wiki
         uses: actions/checkout@v3
