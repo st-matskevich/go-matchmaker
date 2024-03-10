@@ -19,22 +19,18 @@ import (
 const DOCKER_INTERACTOR = "docker"
 
 type DockerInteractor struct {
-	DockerClient *client.Client
+	dockerClient *client.Client
 
-	ImageRegistryUsername string
-	ImageRegisrtyPassword string
-
-	DockerNetwork    string
-	ImageName        string
-	ImageExposedPort nat.Port
+	network string
+	image   ImageInfo
 }
 
 func (interactor *DockerInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
 
-	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: interactor.ImageName}, filters.KeyValuePair{Key: "status", Value: "running"})
-	containers, err := interactor.DockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	args := filters.NewArgs(filters.KeyValuePair{Key: "ancestor", Value: interactor.image.ImageName}, filters.KeyValuePair{Key: "status", Value: "running"})
+	containers, err := interactor.dockerClient.ContainerList(ctx, types.ContainerListOptions{Filters: args})
 	if err != nil {
 		return result, err
 	}
@@ -50,12 +46,12 @@ func (interactor *DockerInteractor) InspectContainer(id string) (ContainerInfo, 
 	result := ContainerInfo{}
 	ctx := context.Background()
 
-	containerInfo, err := interactor.DockerClient.ContainerInspect(ctx, id)
+	containerInfo, err := interactor.dockerClient.ContainerInspect(ctx, id)
 	if err != nil {
 		return result, err
 	}
 
-	binding := containerInfo.NetworkSettings.Ports[interactor.ImageExposedPort]
+	binding := containerInfo.NetworkSettings.Ports[interactor.image.ImageExposedPort]
 	if len(binding) == 0 {
 		return result, errors.New("no binding found for specified IMAGE_EXPOSE_PORT")
 	}
@@ -69,10 +65,10 @@ func (interactor *DockerInteractor) InspectContainer(id string) (ContainerInfo, 
 func (interactor *DockerInteractor) CreateContainer() (string, error) {
 	ctx := context.Background()
 	pullOptions := types.ImagePullOptions{}
-	if interactor.ImageRegistryUsername != "" {
+	if interactor.image.ImageRegistryUsername != "" {
 		authConfig := types.AuthConfig{
-			Username: interactor.ImageRegistryUsername,
-			Password: interactor.ImageRegisrtyPassword,
+			Username: interactor.image.ImageRegistryUsername,
+			Password: interactor.image.ImageRegisrtyPassword,
 		}
 
 		encodedJSON, err := json.Marshal(authConfig)
@@ -83,8 +79,8 @@ func (interactor *DockerInteractor) CreateContainer() (string, error) {
 		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
 	}
 
-	log.Printf("Pulling image %v", interactor.ImageName)
-	out, err := interactor.DockerClient.ImagePull(ctx, interactor.ImageName, pullOptions)
+	log.Printf("Pulling image %v", interactor.image.ImageName)
+	out, err := interactor.dockerClient.ImagePull(ctx, interactor.image.ImageName, pullOptions)
 	if err != nil {
 		return "", err
 	}
@@ -106,21 +102,40 @@ func (interactor *DockerInteractor) CreateContainer() (string, error) {
 	hostConfig := container.HostConfig{}
 	portBindings := []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "0"}}
 	hostConfig.PortBindings = make(nat.PortMap)
-	hostConfig.PortBindings[interactor.ImageExposedPort] = portBindings
+	hostConfig.PortBindings[interactor.image.ImageExposedPort] = portBindings
 
-	hostConfig.NetworkMode = container.NetworkMode(interactor.DockerNetwork)
+	hostConfig.NetworkMode = container.NetworkMode(interactor.network)
 
 	log.Println("Creating continer")
-	resp, err := interactor.DockerClient.ContainerCreate(ctx, &container.Config{Image: interactor.ImageName}, &hostConfig, nil, nil, "")
+	resp, err := interactor.dockerClient.ContainerCreate(ctx, &container.Config{Image: interactor.image.ImageName}, &hostConfig, nil, nil, "")
 	if err != nil {
 		return "", err
 	}
 	log.Printf("Created container %v", resp.ID)
 
-	err = interactor.DockerClient.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
+	err = interactor.dockerClient.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
 	if err != nil {
 		return "", err
 	}
 
 	return resp.ID, nil
+}
+
+type DockerContainerInteractorOptions struct {
+	DockerNetwork string
+}
+
+func CreateDockerContainerInteractor(image ImageInfo, options DockerContainerInteractorOptions) (ContainerInteractor, error) {
+	docker, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+
+	interactor := DockerInteractor{
+		dockerClient: docker,
+		image:        image,
+		network:      options.DockerNetwork,
+	}
+
+	return &interactor, nil
 }

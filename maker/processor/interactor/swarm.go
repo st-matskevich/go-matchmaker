@@ -21,15 +21,10 @@ import (
 const SWARM_INTERACTOR = "swarm"
 
 type SwarmInteractor struct {
-	DockerClient *client.Client
+	dockerClient *client.Client
 
-	ImageRegistryUsername string
-	ImageRegisrtyPassword string
-
-	DockerNetwork    string
-	ImageName        string
-	ImageExposedPort nat.Port
-
+	image                  ImageInfo
+	network                string
 	ConvergeVerifyCooldown int
 	ConvergeVerifyRetries  int
 }
@@ -38,7 +33,7 @@ func (interactor *SwarmInteractor) ListContainers() ([]string, error) {
 	result := []string{}
 	ctx := context.Background()
 
-	services, err := interactor.DockerClient.ServiceList(ctx, types.ServiceListOptions{Status: true})
+	services, err := interactor.dockerClient.ServiceList(ctx, types.ServiceListOptions{Status: true})
 	if err != nil {
 		return result, err
 	}
@@ -49,7 +44,7 @@ func (interactor *SwarmInteractor) ListContainers() ([]string, error) {
 			continue
 		}
 
-		if !strings.HasPrefix(service.Spec.TaskTemplate.ContainerSpec.Image, interactor.ImageName) {
+		if !strings.HasPrefix(service.Spec.TaskTemplate.ContainerSpec.Image, interactor.image.ImageName) {
 			continue
 		}
 
@@ -76,7 +71,7 @@ func (interactor *SwarmInteractor) InspectContainer(id string) (ContainerInfo, e
 		return result, errors.New("task doesn't contain container status")
 	}
 
-	service, _, err := interactor.DockerClient.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
+	service, _, err := interactor.dockerClient.ServiceInspectWithRaw(ctx, id, types.ServiceInspectOptions{})
 	if err != nil {
 		return result, err
 	}
@@ -88,7 +83,7 @@ func (interactor *SwarmInteractor) InspectContainer(id string) (ContainerInfo, e
 			return result, errors.New("failed to parse port")
 		}
 
-		if port == interactor.ImageExposedPort {
+		if port == interactor.image.ImageExposedPort {
 			exposedPort = strconv.Itoa(int(portConfig.PublishedPort))
 		}
 	}
@@ -103,7 +98,7 @@ func (interactor *SwarmInteractor) InspectContainer(id string) (ContainerInfo, e
 			continue
 		}
 
-		if network.Network.Spec.Name == interactor.DockerNetwork {
+		if network.Network.Spec.Name == interactor.network {
 			parsedIP, err := netip.ParsePrefix(network.Addresses[0])
 			if err != nil {
 				return result, err
@@ -126,10 +121,10 @@ func (interactor *SwarmInteractor) InspectContainer(id string) (ContainerInfo, e
 func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	ctx := context.Background()
 	serviceCreateOptions := types.ServiceCreateOptions{}
-	if interactor.ImageRegistryUsername != "" {
+	if interactor.image.ImageRegistryUsername != "" {
 		authConfig := types.AuthConfig{
-			Username: interactor.ImageRegistryUsername,
-			Password: interactor.ImageRegisrtyPassword,
+			Username: interactor.image.ImageRegistryUsername,
+			Password: interactor.image.ImageRegisrtyPassword,
 		}
 
 		encodedJSON, err := json.Marshal(authConfig)
@@ -143,20 +138,20 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	serviceSpec := swarm.ServiceSpec{}
 
 	containerSpec := swarm.ContainerSpec{}
-	containerSpec.Image = interactor.ImageName
+	containerSpec.Image = interactor.image.ImageName
 
 	//range of ports used for bindings can be limited in
 	///proc/sys/net/ipv4/ip_local_port_range
 	portConfig := swarm.PortConfig{}
-	portConfig.Protocol = swarm.PortConfigProtocol(interactor.ImageExposedPort.Proto())
+	portConfig.Protocol = swarm.PortConfigProtocol(interactor.image.ImageExposedPort.Proto())
 	portConfig.PublishedPort = 0
-	portConfig.TargetPort = uint32(interactor.ImageExposedPort.Int())
+	portConfig.TargetPort = uint32(interactor.image.ImageExposedPort.Int())
 
 	endpointSpec := swarm.EndpointSpec{}
 	endpointSpec.Ports = []swarm.PortConfig{portConfig}
 
 	networkAttachment := swarm.NetworkAttachmentConfig{}
-	networkAttachment.Target = interactor.DockerNetwork
+	networkAttachment.Target = interactor.network
 
 	//TODO: maybe let docker handle service restarts?
 	restartPolicy := swarm.RestartPolicy{}
@@ -170,7 +165,7 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	serviceSpec.EndpointSpec = &endpointSpec
 
 	log.Println("Creating service")
-	response, err := interactor.DockerClient.ServiceCreate(ctx, serviceSpec, serviceCreateOptions)
+	response, err := interactor.dockerClient.ServiceCreate(ctx, serviceSpec, serviceCreateOptions)
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +199,7 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 func (interactor *SwarmInteractor) getServiceTask(id string) (*swarm.Task, error) {
 	ctx := context.Background()
 	args := filters.NewArgs(filters.KeyValuePair{Key: "service", Value: id})
-	tasks, err := interactor.DockerClient.TaskList(ctx, types.TaskListOptions{Filters: args})
+	tasks, err := interactor.dockerClient.TaskList(ctx, types.TaskListOptions{Filters: args})
 	if err != nil {
 		return nil, err
 	}
@@ -217,4 +212,27 @@ func (interactor *SwarmInteractor) getServiceTask(id string) (*swarm.Task, error
 	}
 
 	return &tasks[0], nil
+}
+
+type SwarmContainerInteractorOptions struct {
+	DockerNetwork          string
+	ConvergeVerifyCooldown int
+	ConvergeVerifyRetries  int
+}
+
+func CreateSwarmContainerInteractor(image ImageInfo, options SwarmContainerInteractorOptions) (ContainerInteractor, error) {
+	docker, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+
+	interactor := SwarmInteractor{
+		dockerClient:           docker,
+		image:                  image,
+		network:                options.DockerNetwork,
+		ConvergeVerifyCooldown: options.ConvergeVerifyCooldown,
+		ConvergeVerifyRetries:  options.ConvergeVerifyRetries,
+	}
+
+	return &interactor, nil
 }
