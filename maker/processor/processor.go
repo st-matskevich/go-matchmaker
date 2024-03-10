@@ -11,7 +11,7 @@ import (
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/common/web"
-	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
+	"github.com/st-matskevich/go-matchmaker/maker/interactor"
 )
 
 type Processor struct {
