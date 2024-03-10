@@ -8,7 +8,7 @@ import (
 	"github.com/st-matskevich/go-matchmaker/common"
 	"github.com/st-matskevich/go-matchmaker/common/data"
 	"github.com/st-matskevich/go-matchmaker/common/web"
-	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
+	"github.com/st-matskevich/go-matchmaker/maker/interactor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

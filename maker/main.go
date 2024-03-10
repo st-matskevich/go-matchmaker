@@ -10,8 +10,8 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/joho/godotenv"
 	"github.com/st-matskevich/go-matchmaker/common/data"
+	"github.com/st-matskevich/go-matchmaker/maker/interactor"
 	"github.com/st-matskevich/go-matchmaker/maker/processor"
-	"github.com/st-matskevich/go-matchmaker/maker/processor/interactor"
 )
 
 func main() {
