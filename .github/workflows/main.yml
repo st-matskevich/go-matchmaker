@@ -14,7 +14,7 @@ jobs:
       - name: Go setup
         uses: actions/setup-go@v3
         with:
-          go-version: '1.19.x'
+          go-version: '1.21.x'
           cache: true
 
       - name: Run golangci-lint
@@ -35,7 +35,7 @@ jobs:
       - name: Go setup
         uses: actions/setup-go@v3
         with:
-          go-version: '1.19.x'
+          go-version: '1.21.x'
           cache: true
 
       - name: Run golangci-lint
@@ -62,7 +62,7 @@ jobs:
       - name: Go setup
         uses: actions/setup-go@v3
         with:
-          go-version: '1.19.x'
+          go-version: '1.21.x'
           cache: true
 
       - name: Go test

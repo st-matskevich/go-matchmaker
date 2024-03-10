@@ -2,8 +2,6 @@ package interactor
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -12,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -66,17 +65,17 @@ func (interactor *DockerInteractor) CreateContainer() (string, error) {
 	ctx := context.Background()
 	pullOptions := types.ImagePullOptions{}
 	if interactor.image.ImageRegistryUsername != "" {
-		authConfig := types.AuthConfig{
+		authConfig := registry.AuthConfig{
 			Username: interactor.image.ImageRegistryUsername,
 			Password: interactor.image.ImageRegisrtyPassword,
 		}
 
-		encodedJSON, err := json.Marshal(authConfig)
+		encodedConfig, err := registry.EncodeAuthConfig(authConfig)
 		if err != nil {
 			return "", err
 		}
 
-		pullOptions.RegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
+		pullOptions.RegistryAuth = encodedConfig
 	}
 
 	log.Printf("Pulling image %v", interactor.image.ImageName)

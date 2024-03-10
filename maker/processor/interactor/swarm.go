@@ -2,8 +2,6 @@ package interactor
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/netip"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -122,17 +121,17 @@ func (interactor *SwarmInteractor) CreateContainer() (string, error) {
 	ctx := context.Background()
 	serviceCreateOptions := types.ServiceCreateOptions{}
 	if interactor.image.ImageRegistryUsername != "" {
-		authConfig := types.AuthConfig{
+		authConfig := registry.AuthConfig{
 			Username: interactor.image.ImageRegistryUsername,
 			Password: interactor.image.ImageRegisrtyPassword,
 		}
 
-		encodedJSON, err := json.Marshal(authConfig)
+		encodedConfig, err := registry.EncodeAuthConfig(authConfig)
 		if err != nil {
 			return "", err
 		}
 
-		serviceCreateOptions.EncodedRegistryAuth = base64.URLEncoding.EncodeToString(encodedJSON)
+		serviceCreateOptions.EncodedRegistryAuth = encodedConfig
 	}
 
 	serviceSpec := swarm.ServiceSpec{}
