@@ -59,7 +59,7 @@ func (provider *RedisDataProvider) ListPop() (string, error) {
 	return val[1], nil
 }
 
-func CreateRedisDataProvider(url string) (*RedisDataProvider, error) {
+func CreateRedisDataProvider(url string) (DataProvider, error) {
 	ctx := context.Background()
 	clientRedis := redis.NewClient(&redis.Options{
 		Addr: url,
